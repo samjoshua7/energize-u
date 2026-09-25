@@ -379,8 +379,279 @@ Never claim to have changed data or run an action. Keep answers practical and un
   }
 })
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 5. LIVE DEMO — Two-device simulation (grid outage/genset toggling)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const DIESEL_RATE_L_PER_HOUR = 1.2
+const DIESEL_COST_PER_LITRE  = 90          // ₹
+const GRID_LOAD_KW           = 10          // average plant draw
+const GRID_COST_PER_KWH      = 8           // ₹
+const GENSET_CO2_KG_PER_L    = 2.68        // IPCC diesel
+const GRID_CO2_KG_PER_KWH    = 0.82        // CEA India 2023
+
+// POST /api/simulate/grid-toggle  { account_id, status: "on"|"off" }
+app.post('/api/simulate/grid-toggle', async (req, res) => {
+  const { account_id = 'demo-msme-01', status } = req.body
+  if (!['on', 'off'].includes(status)) {
+    return res.status(400).json({ error: 'status must be "on" or "off"' })
+  }
+  if (!supabase) return res.status(503).json({ error: 'Supabase not configured' })
+
+  const now = new Date().toISOString()
+
+  try {
+    if (status === 'off') {
+      // Grid going DOWN — genset auto-starts
+      await supabase.from('power_state').upsert(
+        { account_id, source: 'grid', status: 'off', updated_at: now },
+        { onConflict: 'account_id,source' }
+      )
+      await supabase.from('power_state').upsert(
+        { account_id, source: 'genset', status: 'on', updated_at: now },
+        { onConflict: 'account_id,source' }
+      )
+      await supabase.from('events').insert([
+        { account_id, event_type: 'grid_outage', started_at: now },
+        { account_id, event_type: 'genset_on', started_at: now },
+      ])
+
+      return res.json({
+        ok: true,
+        message: 'Grid offline — genset auto-started',
+        grid: 'off', genset: 'on', timestamp: now,
+      })
+
+    } else {
+      // Grid coming BACK — close open events, compute diesel cost
+      // 1. Close grid_outage
+      const { data: openOutages } = await supabase.from('events')
+        .select('*')
+        .eq('account_id', account_id)
+        .eq('event_type', 'grid_outage')
+        .is('ended_at', null)
+        .order('started_at', { ascending: false })
+        .limit(1)
+
+      if (openOutages?.length) {
+        const dur = Math.round((new Date(now) - new Date(openOutages[0].started_at)) / 1000)
+        await supabase.from('events')
+          .update({ ended_at: now, duration_seconds: dur })
+          .eq('id', openOutages[0].id)
+      }
+
+      // 2. Close genset_on — compute diesel + cost
+      const { data: openGenset } = await supabase.from('events')
+        .select('*')
+        .eq('account_id', account_id)
+        .eq('event_type', 'genset_on')
+        .is('ended_at', null)
+        .order('started_at', { ascending: false })
+        .limit(1)
+
+      let dieselUsed = 0, gensetCost = 0, gensetCo2 = 0, durationSec = 0
+      if (openGenset?.length) {
+        const evt = openGenset[0]
+        durationSec = Math.round((new Date(now) - new Date(evt.started_at)) / 1000)
+        const hours = durationSec / 3600
+        dieselUsed = parseFloat((hours * DIESEL_RATE_L_PER_HOUR).toFixed(3))
+        gensetCost = parseFloat((dieselUsed * DIESEL_COST_PER_LITRE).toFixed(2))
+        gensetCo2  = parseFloat((dieselUsed * GENSET_CO2_KG_PER_L).toFixed(3))
+
+        await supabase.from('events')
+          .update({ ended_at: now, duration_seconds: durationSec, cost_incurred: gensetCost, diesel_litres: dieselUsed, co2_kg: gensetCo2 })
+          .eq('id', evt.id)
+
+        // Log consumption
+        await supabase.from('consumption_log').insert({
+          account_id, source: 'diesel', amount: dieselUsed, unit: 'litres', cost: gensetCost, co2_kg: gensetCo2, logged_at: now,
+        })
+      }
+
+      // 3. Insert restore/off markers
+      await supabase.from('events').insert([
+        { account_id, event_type: 'grid_restored', started_at: now, ended_at: now, duration_seconds: 0 },
+        { account_id, event_type: 'genset_off', started_at: now, ended_at: now, duration_seconds: 0 },
+      ])
+
+      // 4. Flip states
+      await supabase.from('power_state').upsert(
+        { account_id, source: 'grid', status: 'on', updated_at: now },
+        { onConflict: 'account_id,source' }
+      )
+      await supabase.from('power_state').upsert(
+        { account_id, source: 'genset', status: 'off', updated_at: now },
+        { onConflict: 'account_id,source' }
+      )
+
+      return res.json({
+        ok: true,
+        message: `Grid restored — genset stopped (ran ${durationSec}s, used ${dieselUsed}L diesel, cost ₹${gensetCost})`,
+        grid: 'on', genset: 'off',
+        duration_seconds: durationSec, diesel_litres: dieselUsed, cost_incurred: gensetCost, co2_kg: gensetCo2,
+        timestamp: now,
+      })
+    }
+  } catch (err) {
+    console.error('[grid-toggle error]:', err)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/status/:account_id — live snapshot for dashboard polling
+app.get('/api/status/:account_id', async (req, res) => {
+  const { account_id } = req.params
+  if (!supabase) return res.status(503).json({ error: 'Supabase not configured' })
+
+  const now = new Date()
+  const todayStart = new Date(now)
+  todayStart.setHours(0, 0, 0, 0)
+
+  try {
+    // 1. Power states
+    const { data: states } = await supabase.from('power_state')
+      .select('source, status, updated_at')
+      .eq('account_id', account_id)
+
+    const stateMap = {}
+    for (const s of (states || [])) stateMap[s.source] = s
+    const gridStatus   = stateMap.grid?.status   || 'on'
+    const gensetStatus = stateMap.genset?.status  || 'off'
+    const solarStatus  = stateMap.solar?.status   || 'off'
+
+    // 2. Completed genset events today
+    const { data: todayEvents } = await supabase.from('events')
+      .select('cost_incurred, diesel_litres, co2_kg, duration_seconds')
+      .eq('account_id', account_id)
+      .eq('event_type', 'genset_on')
+      .not('ended_at', 'is', null)
+      .gte('started_at', todayStart.toISOString())
+
+    let gensetCost = 0, dieselLitres = 0, gensetCo2 = 0, gensetSeconds = 0
+    for (const e of (todayEvents || [])) {
+      gensetCost    += parseFloat(e.cost_incurred || 0)
+      dieselLitres  += parseFloat(e.diesel_litres || 0)
+      gensetCo2     += parseFloat(e.co2_kg || 0)
+      gensetSeconds += parseInt(e.duration_seconds || 0)
+    }
+
+    // 3. Running genset cost if currently on
+    let runningSeconds = 0, runningDiesel = 0, runningCost = 0, runningCo2 = 0
+    if (gensetStatus === 'on') {
+      const { data: openG } = await supabase.from('events')
+        .select('started_at')
+        .eq('account_id', account_id)
+        .eq('event_type', 'genset_on')
+        .is('ended_at', null)
+        .order('started_at', { ascending: false })
+        .limit(1)
+
+      if (openG?.length) {
+        runningSeconds = Math.round((now - new Date(openG[0].started_at)) / 1000)
+        const hours = runningSeconds / 3600
+        runningDiesel = parseFloat((hours * DIESEL_RATE_L_PER_HOUR).toFixed(3))
+        runningCost   = parseFloat((runningDiesel * DIESEL_COST_PER_LITRE).toFixed(2))
+        runningCo2    = parseFloat((runningDiesel * GENSET_CO2_KG_PER_L).toFixed(3))
+      }
+    }
+
+    // 4. Grid cost estimate
+    const elapsedToday = Math.round((now - todayStart) / 1000)
+    const totalGensetSec = gensetSeconds + runningSeconds
+    const gridSeconds = Math.max(0, elapsedToday - totalGensetSec)
+    const gridKwh  = parseFloat((gridSeconds / 3600 * GRID_LOAD_KW).toFixed(3))
+    const gridCost = parseFloat((gridKwh * GRID_COST_PER_KWH).toFixed(2))
+    const gridCo2  = parseFloat((gridKwh * GRID_CO2_KG_PER_KWH).toFixed(3))
+
+    const totalGensetCost = gensetCost + runningCost
+    const totalDiesel     = dieselLitres + runningDiesel
+    const totalGensetCo2  = gensetCo2 + runningCo2
+
+    // 5. Latest event
+    const { data: latestArr } = await supabase.from('events')
+      .select('*')
+      .eq('account_id', account_id)
+      .order('started_at', { ascending: false })
+      .limit(1)
+
+    return res.json({
+      timestamp: now.toISOString(),
+      grid:   { status: gridStatus,   since: stateMap.grid?.updated_at },
+      genset: { status: gensetStatus, since: stateMap.genset?.updated_at },
+      solar:  { status: solarStatus,  since: stateMap.solar?.updated_at },
+      today: {
+        total_cost:    parseFloat((gridCost + totalGensetCost).toFixed(2)),
+        grid_cost:     gridCost,
+        genset_cost:   parseFloat(totalGensetCost.toFixed(2)),
+        diesel_litres: parseFloat(totalDiesel.toFixed(3)),
+        grid_kwh:      gridKwh,
+        co2_kg:        parseFloat((gridCo2 + totalGensetCo2).toFixed(3)),
+        grid_co2_kg:   gridCo2,
+        genset_co2_kg: parseFloat(totalGensetCo2.toFixed(3)),
+      },
+      genset_running: gensetStatus === 'on' ? {
+        running_seconds: runningSeconds,
+        diesel_so_far:   runningDiesel,
+        cost_so_far:     runningCost,
+      } : null,
+      latest_event: latestArr?.[0] || null,
+      constants: {
+        diesel_rate_l_per_hour: DIESEL_RATE_L_PER_HOUR,
+        diesel_cost_per_litre:  DIESEL_COST_PER_LITRE,
+        grid_load_kw:           GRID_LOAD_KW,
+        grid_cost_per_kwh:      GRID_COST_PER_KWH,
+      },
+    })
+  } catch (err) {
+    console.error('[status error]:', err)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/events/:account_id — recent event history
+app.get('/api/events/:account_id', async (req, res) => {
+  const { account_id } = req.params
+  if (!supabase) return res.status(503).json({ error: 'Supabase not configured' })
+
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200)
+  try {
+    const { data, error } = await supabase.from('events')
+      .select('*')
+      .eq('account_id', account_id)
+      .order('started_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw error
+    return res.json({ events: data || [], count: (data || []).length })
+  } catch (err) {
+    console.error('[events error]:', err)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/simulate/reset — clear demo data for re-demo
+app.post('/api/simulate/reset', async (req, res) => {
+  const { account_id = 'demo-msme-01' } = req.body
+  if (!supabase) return res.status(503).json({ error: 'Supabase not configured' })
+
+  try {
+    await supabase.from('events').delete().eq('account_id', account_id)
+    await supabase.from('consumption_log').delete().eq('account_id', account_id)
+    await supabase.from('power_state').upsert([
+      { account_id, source: 'grid',   status: 'on',  updated_at: new Date().toISOString() },
+      { account_id, source: 'genset', status: 'off', updated_at: new Date().toISOString() },
+      { account_id, source: 'solar',  status: 'off', updated_at: new Date().toISOString() },
+    ], { onConflict: 'account_id,source' })
+
+    return res.json({ ok: true, message: 'Demo data reset' })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
+})
+
 app.listen(PORT, () => {
   console.log(`[Energize U Backend] Running on http://localhost:${PORT}`)
   console.log(`[Energize U Backend] Groq OCR ready: ${Boolean(groqApiKey)}`)
   console.log(`[Energize U Backend] OpenRouter Advisor ready: ${Boolean(openRouterApiKey)}`)
 })
+
