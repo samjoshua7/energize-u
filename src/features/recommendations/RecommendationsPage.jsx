@@ -24,8 +24,6 @@ import {
 import { useAuth } from '../../hooks/useAuth'
 import { getRecommendations, updateRecommendationStatus, createRecommendation } from './api'
 import { generateRecommendations } from '../../lib/ai/openRouterClient'
-import { getEnergyEntries } from '../energyEntries/api'
-import { getMatchedBenchmark } from '../benchmarks/api'
 import { RECOMMENDATION_CATEGORY_LABELS } from '../../lib/constants'
 import StatusAlert from '../../components/feedback/StatusAlert'
 
@@ -87,75 +85,7 @@ export default function RecommendationsPage() {
           message: `Generated ${res.recommendations.length} recommendations via OpenRouter reasoning.`,
         })
       } else {
-        const entries = await getEnergyEntries(business.business_id)
-        const benchmark = await getMatchedBenchmark(business.business_id)
-        const generatedLocal = []
-
-        const dieselEntries = entries.filter((e) => e.source_type === 'diesel')
-        if (dieselEntries.length > 0) {
-          const totalDieselCost = dieselEntries.reduce((s, e) => s + parseFloat(e.cost_amount), 0)
-          const totalDieselLitres = dieselEntries.reduce((s, e) => s + parseFloat(e.quantity), 0)
-          const estGensetPerKwh = totalDieselLitres > 0 ? (totalDieselCost / totalDieselLitres) / 3.3 : 29.5
-
-          generatedLocal.push({
-            business_id: business.business_id,
-            category: 'fuel_switch',
-            title: 'Minimize Diesel Genset Runtime via Demand Optimization',
-            description: `Diesel generation costs approx ₹${estGensetPerKwh.toFixed(1)}/kWh compared to grid power at ~₹9.5/kWh. Shifting load away from backup generators cuts fuel spend substantially.`,
-            estimated_savings_amount: 18500,
-            estimated_savings_pct: 22,
-            basis: {
-              diesel_cost_per_kwh: `₹${estGensetPerKwh.toFixed(2)}/kWh`,
-              grid_cost_per_kwh: '₹9.50/kWh',
-              diesel_spend: `₹${totalDieselCost.toFixed(2)}`,
-            },
-            ai_model_used: 'meta-llama/llama-3.3-70b-instruct:free',
-            status: 'open',
-          })
-        }
-
-        if (!business.has_solar) {
-          generatedLocal.push({
-            business_id: business.business_id,
-            category: 'solar_sizing',
-            title: 'Right-Size a 35 kW Rooftop Solar PV Installation',
-            description: 'A 35 kW grid-tied solar system with net metering would offset ~35-40% of daytime operational power with simple payback in ~3.2 years.',
-            estimated_savings_amount: 24000,
-            estimated_savings_pct: 35,
-            basis: {
-              recommended_kw: '35 kW',
-              net_metering_delta: '₹6.50/kWh',
-            },
-            ai_model_used: 'meta-llama/llama-3.3-70b-instruct:free',
-            status: 'open',
-          })
-        }
-
-        if (benchmark) {
-          generatedLocal.push({
-            business_id: business.business_id,
-            category: 'load_shift',
-            title: 'Stagger High-Draw Equipment to Off-Peak TOD Windows',
-            description: 'Shift high-demand heavy runs to off-peak slots (10:00 PM – 06:00 AM) to capture Time-of-Day night rebate discounts.',
-            estimated_savings_amount: 8500,
-            estimated_savings_pct: 12,
-            basis: {
-              benchmark_sector: benchmark.sector,
-              benchmark_source: benchmark.source,
-            },
-            ai_model_used: 'meta-llama/llama-3.3-70b-instruct:free',
-            status: 'open',
-          })
-        }
-
-        for (const item of generatedLocal) {
-          await createRecommendation(item)
-        }
-
-        setAlert({
-          severity: 'success',
-          message: `Generated ${generatedLocal.length} recommendations from ledger data.`,
-        })
+        setAlert({ severity: 'error', message: res.error || 'No validated recommendations were returned from the AI service.' })
       }
 
       await loadRecs()

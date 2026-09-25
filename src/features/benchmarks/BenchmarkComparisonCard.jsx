@@ -1,10 +1,10 @@
+import Grid from '@mui/material/Grid2'
 import React, { useState, useEffect } from 'react'
 import {
   Card,
   CardContent,
   Typography,
   Box,
-  Grid,
   Chip,
   CircularProgress,
   useTheme,
@@ -58,7 +58,7 @@ export default function BenchmarkComparisonCard({
   return (
     <Card sx={{ border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0'}` }}>
       <CardContent sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
           <Box>
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               Sector Benchmark Comparison
@@ -81,13 +81,14 @@ export default function BenchmarkComparisonCard({
             <Box
               sx={{
                 p: 1.25,
+                height: '100%',
                 bgcolor: isDark ? 'rgba(255, 255, 255, 0.02)' : '#F8FAFC',
                 borderRadius: 1,
                 border: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : '#E2E8F0'}`,
               }}
             >
               <Typography variant="caption" color="text.secondary">Specific Energy Consumption</Typography>
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mt: 0.25 }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 1, mt: 0.25 }}>
                 <Typography variant="h4" sx={{ fontWeight: 700 }}>
                   {unitEnergy != null ? `${unitEnergy.toFixed(3)} kWh` : '—'}
                 </Typography>
@@ -103,13 +104,14 @@ export default function BenchmarkComparisonCard({
             <Box
               sx={{
                 p: 1.25,
+                height: '100%',
                 bgcolor: isDark ? 'rgba(255, 255, 255, 0.02)' : '#F8FAFC',
                 borderRadius: 1,
                 border: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : '#E2E8F0'}`,
               }}
             >
               <Typography variant="caption" color="text.secondary">Energy Cost / Unit</Typography>
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mt: 0.25 }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 1, mt: 0.25 }}>
                 <Typography
                   variant="h4"
                   sx={{

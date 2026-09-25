@@ -1,10 +1,10 @@
+import Grid from '@mui/material/Grid2'
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Typography,
   Card,
   CardContent,
-  Grid,
   Button,
   Chip,
   CircularProgress,
@@ -12,15 +12,13 @@ import {
 } from '@mui/material'
 import {
   DocumentScannerOutlined as ScanIcon,
-  BoltOutlined as EnergyIcon,
-  Co2Outlined as CarbonIcon,
   SavingsOutlined as SavingsIcon,
   SpeedOutlined as OutputIcon,
   Add as AddIcon,
   ArrowForward as ArrowIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts'
 import { useAuth } from '../../hooks/useAuth'
 import { getEnergyEntries } from '../energyEntries/api'
 import { getOutputRecords } from '../outputRecords/api'
@@ -30,6 +28,9 @@ import BenchmarkComparisonCard from '../benchmarks/BenchmarkComparisonCard'
 import BillUploadDialog from '../energyEntries/BillUploadDialog'
 import ManualEntryDialog from '../energyEntries/ManualEntryDialog'
 import OutputRecordDialog from '../outputRecords/OutputRecordDialog'
+import DashboardProfileProgressCard from './DashboardProfileProgressCard'
+import QuickAddMachineDialog from '../machines/QuickAddMachineDialog'
+import { getMachines } from '../machines/api'
 import { SOURCE_TYPE_LABELS, SOURCE_COLORS } from '../../lib/constants'
 
 export default function DashboardPage() {
@@ -40,6 +41,7 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState([])
+  const [machines, setMachines] = useState([])
   const [latestOutput, setLatestOutput] = useState(null)
   const [topRecommendations, setTopRecommendations] = useState([])
   const [emissionFactors, setEmissionFactors] = useState({})
@@ -48,20 +50,23 @@ export default function DashboardPage() {
   const [openScanModal, setOpenScanModal] = useState(false)
   const [openManualModal, setOpenManualModal] = useState(false)
   const [openOutputModal, setOpenOutputModal] = useState(false)
+  const [openQuickMachineModal, setOpenQuickMachineModal] = useState(false)
 
   const loadDashboardData = useCallback(async () => {
     if (!business?.business_id) return
     try {
       setLoading(true)
 
-      const [entryData, outputData, recData, efData] = await Promise.all([
+      const [entryData, outputData, recData, efData, machineData] = await Promise.all([
         getEnergyEntries(business.business_id),
         getOutputRecords(business.business_id),
         getRecommendations(business.business_id, 'open'),
         getEmissionFactors(),
+        getMachines(business.business_id),
       ])
 
       setEntries(entryData || [])
+      setMachines(machineData || [])
       setLatestOutput(outputData?.[0] || null)
       setTopRecommendations((recData || []).slice(0, 3))
 
@@ -97,7 +102,7 @@ export default function DashboardPage() {
   // CO2 emissions in kg
   const totalCo2Kg = entries.reduce((acc, e) => {
     const q = parseFloat(e.quantity) || 0
-    const factor = emissionFactors[e.source_type] || (e.source_type === 'grid' ? 0.71 : 2.68)
+    const factor = emissionFactors[e.source_type] || 0
     return acc + q * factor
   }, 0)
 
@@ -121,12 +126,30 @@ export default function DashboardPage() {
     color: SOURCE_COLORS[key] || '#10B981',
   }))
 
+  const periodMap = {}
+  entries.forEach((entry) => {
+    const period = entry.period_end || entry.period_start
+    if (!period) return
+    const monthKey = period.slice(0, 7)
+    if (!periodMap[monthKey]) periodMap[monthKey] = { monthKey, cost: 0, quantity: 0 }
+    periodMap[monthKey].cost += parseFloat(entry.cost_amount) || 0
+    periodMap[monthKey].quantity += parseFloat(entry.quantity) || 0
+  })
+
+  const periodData = Object.values(periodMap)
+    .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+    .map((item) => ({
+      ...item,
+      month: new Date(`${item.monthKey}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
+    }))
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, '& .MuiGrid2-root': { minWidth: 0 } }}>
       {/* Top Header Row */}
       <Box
         sx={{
           display: 'flex',
+          flexWrap: 'wrap',
           flexDirection: { xs: 'column', sm: 'row' },
           justifyContent: 'space-between',
           alignItems: { xs: 'flex-start', sm: 'center' },
@@ -173,8 +196,20 @@ export default function DashboardPage() {
         </Box>
       </Box>
 
+      {/* Profile Completion Card (Calculates % and auto-disappears upon 100% completion) */}
+      <DashboardProfileProgressCard
+        business={business}
+        machines={machines}
+        entries={entries}
+        latestOutput={latestOutput}
+        onOpenAddMachine={() => setOpenQuickMachineModal(true)}
+        onOpenScanBill={() => setOpenScanModal(true)}
+        onOpenLogFuel={() => setOpenManualModal(true)}
+        onOpenLogOutput={() => setOpenOutputModal(true)}
+      />
+
       {/* KPI Cards */}
-      <Grid container spacing={1.5}>
+      <Grid container spacing={1.5} sx={{ '& .MuiCard-root': { height: '100%' } }}>
         <Grid size={{ xs: 12, sm: 4 }}>
           <Card>
             <CardContent sx={{ p: 2 }}>
@@ -243,7 +278,7 @@ export default function DashboardPage() {
 
           {latestOutput && (
             <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
-              <Grid size={{ xs: 4 }}>
+              <Grid size={{ xs: 12, sm: 4 }}>
                 <Typography variant="caption" color="text.secondary">Cost / Unit</Typography>
                 <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main', mt: 0.25 }}>
                   ₹{unitCost != null ? unitCost.toFixed(3) : '—'}
@@ -252,7 +287,7 @@ export default function DashboardPage() {
                   </Typography>
                 </Typography>
               </Grid>
-              <Grid size={{ xs: 4 }}>
+              <Grid size={{ xs: 12, sm: 4 }}>
                 <Typography variant="caption" color="text.secondary">Energy / Unit</Typography>
                 <Typography variant="h4" sx={{ fontWeight: 700, mt: 0.25 }}>
                   {unitEnergy != null ? unitEnergy.toFixed(3) : '—'}
@@ -261,7 +296,7 @@ export default function DashboardPage() {
                   </Typography>
                 </Typography>
               </Grid>
-              <Grid size={{ xs: 4 }}>
+              <Grid size={{ xs: 12, sm: 4 }}>
                 <Typography variant="caption" color="text.secondary">Carbon / Unit</Typography>
                 <Typography variant="h4" sx={{ fontWeight: 700, mt: 0.25 }}>
                   {unitCo2 != null ? (unitCo2 * 1000).toFixed(1) : '—'}
@@ -283,10 +318,9 @@ export default function DashboardPage() {
         outputUnit={latestOutput?.output_unit || 'sheets'}
       />
 
-      {/* Mix Breakdown & Top Priority Actions */}
+      {/* Ledger charts & Top Priority Actions */}
       <Grid container spacing={1.5}>
-        {/* Multi-Fuel Breakdown */}
-        <Grid size={{ xs: 12, md: 5 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ p: 2 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
@@ -354,8 +388,39 @@ export default function DashboardPage() {
           </Card>
         </Grid>
 
+        <Grid size={{ xs: 12, md: 8 }}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent sx={{ p: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                Spend over time
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Monthly cost from your logged entries
+              </Typography>
+              {periodData.length === 0 ? (
+                <Box sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography variant="caption" color="text.secondary">No dated entries logged yet.</Typography>
+                </Box>
+              ) : (
+                <Box sx={{ width: '100%', height: 215, mt: 1.5 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={periodData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#27272A' : '#E2E8F0'} vertical={false} />
+                      <XAxis dataKey="month" tick={{ fill: isDark ? '#A1A1AA' : '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fill: isDark ? '#A1A1AA' : '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `₹${Math.round(value / 1000)}k`} width={42} />
+                      <Tooltip formatter={(value) => [`₹${Number(value).toLocaleString('en-IN')}`, 'Spend']} contentStyle={{ backgroundColor: isDark ? '#18181B' : '#FFFFFF', borderColor: isDark ? '#27272A' : '#E2E8F0', borderRadius: 6, fontSize: '0.75rem' }} />
+                      <Legend wrapperStyle={{ fontSize: '0.7rem' }} />
+                      <Bar dataKey="cost" name="Energy spend" fill="#0F766E" radius={[3, 3, 0, 0]} maxBarSize={34} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
         {/* Priority Actions */}
-        <Grid size={{ xs: 12, md: 7 }}>
+        <Grid size={{ xs: 12 }}>
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
@@ -457,6 +522,14 @@ export default function DashboardPage() {
         onClose={() => setOpenOutputModal(false)}
         businessId={business?.business_id}
         defaultUnit="sheets"
+        onSuccess={loadDashboardData}
+      />
+
+      <QuickAddMachineDialog
+        open={openQuickMachineModal}
+        onClose={() => setOpenQuickMachineModal(false)}
+        businessId={business?.business_id}
+        sector={business?.sector || 'printing'}
         onSuccess={loadDashboardData}
       />
     </Box>

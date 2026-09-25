@@ -11,7 +11,8 @@ Full implementation of **Energize U** (hackathon YUVA) — a multi-fuel energy i
    - `0003_derived_and_benchmarks.sql`: `recommendations` + cited real benchmark seed data (CEA India Grid emission factor ~0.71 kg CO₂/kWh, IPCC/BEE fuel factors, BEE SME cluster benchmarks) + SQL RPC functions (`match_sector_benchmark`, `get_business_energy_summary`).
 3. **No Fake Data Rule**: Every recommendation is backed by a mathematical `basis` citing real ledger entries and published benchmarks. All emission factors cite official CEA & BEE publications.
 4. **AI/OCR Fallback**: Groq multimodal vision Edge Function (`extract-bill`) provides instant bill extraction into structured JSON. If network or OCR fails, the system immediately routes the user to the manual entry form with zero data loss.
-5. **Pluggable OpenRouter Advisory**: The `generate-recommendations` function analyzes normalized energy ledger data against matched sector benchmarks. If edge functions are offline during testing, a robust mathematical fallback generates cited recommendations directly from the active ledger.
+5. **Pluggable OpenRouter Advisory**: The `generate-recommendations` function analyzes normalized energy ledger data against matched sector benchmarks. If the AI service is unavailable, the UI reports the failure and never fabricates recommendations.
+6. **Live Energy Assistant**: The shell includes a server-mediated `/api/energy-chat` drawer. It receives the authenticated business ledger, machines, outputs, recommendations, and benchmark context, and requires `OPENROUTER_API_KEY` plus `AI_REASONING_MODEL` on the server.
 
 ## 3. Files Created / Modified
 - [package.json](file:///d:/Git/energize-u/package.json) — React 19, MUI v6, Supabase, Router DOM, Recharts, jsPDF
@@ -65,4 +66,44 @@ Full implementation of **Energize U** (hackathon YUVA) — a multi-fuel energy i
    - `0002_energy_ledger.sql`
    - `0003_derived_and_benchmarks.sql`
 3. Paste `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` into `.env.local`.
-4. Run `npm run dev` and start demoing!
+4. Set `OPENROUTER_API_KEY` and `AI_REASONING_MODEL` in `supabase/.env` for recommendations and chat.
+5. Run the frontend and backend together with the project start command, then test the assistant from the floating action button.
+
+## 5. Verification
+
+- `node --check server/index.js` passed.
+- `npm run build` passed. Vite reports an existing bundle-size warning for the MUI/Recharts bundle.
+- Editor diagnostics are clean for all changed frontend files.
+
+## 6. Remaining Risks / Next Task
+
+- The chat endpoint uses the local Express server; production deployment should move the same contract to a serverless or Supabase Edge Function before exposing it publicly.
+- The simulator still contains intentional scenario presets; these are user-selected calculations, not dashboard or ledger seed data.
+- Next task: add an authenticated production endpoint for `/api/energy-chat` and verify the chat flow against a real Supabase business with RLS enabled.
+
+## Simulator layout repair — 2026-09-25
+
+- Objective: fix overlapping simulator controls and horizontal overflow shown in the supplied screenshot.
+- Decisions: use installed MUI v6 Grid2 with the existing size props; stack slider labels and values; wrap presets and impact summaries; reserve slider thumb space and add accessible slider names.
+- Files modified: src/features/simulator/SimulatorPage.jsx and this handover. Existing unrelated working changes preserved. Branch: fix/simulator-layout.
+- Database changes: none. SQL migrations executed/pending for this fix: none.
+- APIs changed / components added: none.
+- Verification: Babel JSX parsing passed; all five slider accessible labels checked; confirmed Grid2 size support in installed MUI definitions. User confirmed npm run build succeeded. Browser inspection remains pending; this session has no browser automation tools or local Playwright/Puppeteer installation, and no dev server was detected on port 3000. package.json has no lint script.
+- Remaining TODOs (priority): inspect /simulator at phone and desktop widths in light/dark modes.
+- Known risks: rendered layout has not been browser-verified; existing simulation calculations and population behavior were outside this layout fix and were not executed.
+- Quality score: 9/10 for the focused source fix; runtime verification remains outstanding.
+- Exact next task: verify preset wrapping, slider keyboard interaction, and absence of horizontal overflow at 360px and 1440px viewport widths without running the data population action.
+
+
+## Dashboard and shared layout correction ? 2026-09-25
+
+- Objective: correct the dashboard screenshot's collapsed KPI, unit-metric, benchmark and chart columns, and the same defect elsewhere.
+- Root cause / decision: MUI v6 legacy Grid ignores size props. Replace its imports with Grid2 throughout all remaining affected components. Keep existing data and event handling intact.
+- Files modified: src/features/dashboard/{DashboardPage,DashboardProfileProgressCard}.jsx; src/features/benchmarks/BenchmarkComparisonCard.jsx; src/features/businessProfile/{OnboardingPage,ProfilePage}.jsx; src/features/energyEntries/{BillUploadDialog,ManualEntryDialog,UploadPage}.jsx; src/features/energyLedger/LedgerPage.jsx; src/features/machines/QuickAddMachineDialog.jsx; src/features/outputRecords/OutputRecordDialog.jsx; HANDOVER.md.
+- Additional layout changes: dashboard KPI cards have equal heights; unit metrics stack on phones; header actions wrap; benchmark tiles have equal heights and wrapping values.
+- Database changes / SQL executed or pending: none. APIs changed / components added: none.
+- Verification: all 12 Grid-using components parse successfully; AST inspection finds no legacy Grid imports. Server rendering of installed Grid2 confirms responsive column-width CSS, 600px breakpoint and 12px spacing. This checks generated CSS, not browser layout.
+- Remaining TODOs: run npm run build for these new changes (the prior successful build predates them); inspect dashboard at phone and desktop widths. No lint script exists.
+- Known risks: browser verification unavailable in this session; existing unrelated working changes preserved. Earlier simulator-only completion did not fix the dashboard.
+- Quality score: 9/10 for source correctness and complete Grid import coverage; build and visual verification pending.
+- Exact next task: confirm the fresh build and inspect dashboard KPI spacing, three separate unit metrics, two benchmark columns and chart widths at 360px and 1440px.

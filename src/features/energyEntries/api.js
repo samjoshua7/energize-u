@@ -2,45 +2,13 @@ import { supabase } from '../../lib/supabaseClient'
 
 const STORAGE_KEY = 'energize_u_demo_energy_entries'
 
-const DEFAULT_SAMPLE_ENTRIES = [
-  {
-    entry_id: 'sample_grid_1',
-    business_id: 'b0000000-0000-0000-0000-000000000001',
-    source_type: 'grid',
-    entry_source: 'ocr',
-    period_start: '2024-08-01',
-    period_end: '2024-08-31',
-    quantity: 4200,
-    quantity_unit: 'kWh',
-    cost_amount: 39900,
-    kva_load: 45,
-    notes: 'MSEDCL Industrial HT-1 bill (verified)',
-  },
-  {
-    entry_id: 'sample_diesel_1',
-    business_id: 'b0000000-0000-0000-0000-000000000001',
-    source_type: 'diesel',
-    entry_source: 'manual',
-    period_start: '2024-08-05',
-    period_end: '2024-08-28',
-    quantity: 320,
-    quantity_unit: 'litre',
-    cost_amount: 29440,
-    runtime_hours: 28,
-    notes: 'Power backup during feeder maintenance',
-  },
-]
-
 function getLocalEntries() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SAMPLE_ENTRIES))
-      return DEFAULT_SAMPLE_ENTRIES
-    }
+    if (!raw) return []
     return JSON.parse(raw)
   } catch {
-    return DEFAULT_SAMPLE_ENTRIES
+    return []
   }
 }
 

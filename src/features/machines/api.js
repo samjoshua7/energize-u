@@ -1,50 +1,29 @@
 import { supabase } from '../../lib/supabaseClient'
 
-const STORAGE_KEY = 'energize_u_demo_machines'
-
-const DEFAULT_SAMPLE_MACHINES = [
-  {
-    machine_id: 'mac_press_1',
-    business_id: 'b0000000-0000-0000-0000-000000000001',
-    name: 'Heidelberg Speedmaster 4-Color Press',
-    machine_type: 'offset_press',
-    primary_fuel: 'grid',
-    power_rating_kw: 38,
-    age_years: 6,
-  },
-  {
-    machine_id: 'mac_genset_1',
-    business_id: 'b0000000-0000-0000-0000-000000000001',
-    name: 'Kirloskar 62.5 kVA Diesel Generator',
-    machine_type: 'genset',
-    primary_fuel: 'diesel',
-    power_rating_kw: 50,
-    age_years: 4,
-  },
-]
-
-function getLocalMachines() {
+function getLocalMachines(businessId) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SAMPLE_MACHINES))
-      return DEFAULT_SAMPLE_MACHINES
-    }
-    return JSON.parse(raw)
+    const key = `energize_u_machines_${businessId || 'default'}`
+    const raw = localStorage.getItem(key)
+    if (raw) return JSON.parse(raw)
+
+    return []
   } catch {
-    return DEFAULT_SAMPLE_MACHINES
+    return []
   }
 }
 
-function saveLocalMachines(machines) {
+function saveLocalMachines(businessId, machines) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(machines))
+    const key = `energize_u_machines_${businessId || 'default'}`
+    localStorage.setItem(key, JSON.stringify(machines))
   } catch (err) {
-    console.warn('Local storage write failed:', err)
+    console.warn('Local storage write failed for machines:', err)
   }
 }
 
 export async function getMachines(businessId) {
+  if (!businessId) return []
+
   try {
     const { data, error } = await supabase
       .from('machines')
@@ -59,7 +38,7 @@ export async function getMachines(businessId) {
     console.warn('Supabase getMachines fallback to local storage:', err.message)
   }
 
-  return getLocalMachines()
+  return getLocalMachines(businessId)
 }
 
 export async function createMachine(machineData) {
@@ -81,16 +60,16 @@ export async function createMachine(machineData) {
       return data
     }
   } catch (err) {
-    console.warn('Supabase createMachine bypassed due to RLS/Demo:', err.message)
+    console.warn('Supabase createMachine fallback to local storage:', err.message)
   }
 
-  const machines = getLocalMachines()
+  const machines = getLocalMachines(machineData.business_id)
   machines.unshift(localMachine)
-  saveLocalMachines(machines)
+  saveLocalMachines(machineData.business_id, machines)
   return localMachine
 }
 
-export async function updateMachine(machineId, updates) {
+export async function updateMachine(machineId, updates, businessId) {
   try {
     const { data, error } = await supabase
       .from('machines')
@@ -106,14 +85,14 @@ export async function updateMachine(machineId, updates) {
     console.warn('Supabase updateMachine fallback:', err.message)
   }
 
-  const machines = getLocalMachines().map((m) =>
+  const machines = getLocalMachines(businessId).map((m) =>
     m.machine_id === machineId ? { ...m, ...updates } : m
   )
-  saveLocalMachines(machines)
+  saveLocalMachines(businessId, machines)
   return { machine_id: machineId, ...updates }
 }
 
-export async function deleteMachine(machineId) {
+export async function deleteMachine(machineId, businessId) {
   try {
     const { error } = await supabase
       .from('machines')
@@ -125,7 +104,7 @@ export async function deleteMachine(machineId) {
     console.warn('Supabase deleteMachine fallback:', err.message)
   }
 
-  const machines = getLocalMachines().filter((m) => m.machine_id !== machineId)
-  saveLocalMachines(machines)
+  const machines = getLocalMachines(businessId).filter((m) => m.machine_id !== machineId)
+  saveLocalMachines(businessId, machines)
   return true
 }

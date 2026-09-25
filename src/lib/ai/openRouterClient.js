@@ -53,7 +53,7 @@ export async function generateRecommendations(businessId) {
         validatedRecs.push({
           ...validation.data,
           business_id: businessId,
-          ai_model_used: recsData?.model || 'meta-llama/llama-3.3-70b-instruct:free',
+          ai_model_used: recsData?.model || null,
           status: 'open',
         })
       } else {

@@ -6,6 +6,8 @@ export const SOURCE_TYPES = {
   SOLAR: 'solar',
 }
 
+export const SOURCE_TYPE_LIST = Object.values(SOURCE_TYPES)
+
 export const SOURCE_TYPE_LABELS = {
   grid: 'Grid Electricity',
   diesel: 'Diesel Genset',

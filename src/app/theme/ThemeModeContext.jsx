@@ -134,8 +134,8 @@ export function ThemeModeProvider({ children }) {
             root: {
               backgroundColor: isDark ? '#121215' : '#FFFFFF',
               border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0'}`,
-              boxShadow: isDark ? 'none' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-              borderRadius: 8,
+              boxShadow: isDark ? 'none' : '0 1px 2px 0 rgba(15, 23, 42, 0.04)',
+              borderRadius: 6,
               backgroundImage: 'none',
             },
           },
@@ -150,10 +150,10 @@ export function ThemeModeProvider({ children }) {
         MuiButton: {
           styleOverrides: {
             root: {
-              borderRadius: 6,
+              borderRadius: 5,
               boxShadow: 'none',
               fontWeight: 600,
-              padding: '6px 14px',
+              padding: '7px 14px',
               '&:hover': {
                 boxShadow: 'none',
               },
@@ -190,6 +190,13 @@ export function ThemeModeProvider({ children }) {
                   borderWidth: 1.5,
                 },
               },
+            },
+          },
+        },
+        MuiAppBar: {
+          styleOverrides: {
+            root: {
+              backgroundImage: 'none',
             },
           },
         },

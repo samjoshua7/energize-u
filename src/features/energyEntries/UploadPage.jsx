@@ -1,3 +1,4 @@
+import Grid from '@mui/material/Grid2'
 import React, { useState } from 'react'
 import {
   Box,
@@ -5,7 +6,6 @@ import {
   Card,
   CardContent,
   Button,
-  Grid,
   Chip,
   useTheme,
 } from '@mui/material'

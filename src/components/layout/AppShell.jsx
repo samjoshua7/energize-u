@@ -25,7 +25,6 @@ import {
 import {
   DashboardOutlined as DashboardIcon,
   ReceiptLongOutlined as LedgerIcon,
-  DocumentScannerOutlined as ScanIcon,
   AutoAwesomeOutlined as AiIcon,
   PrecisionManufacturingOutlined as FactoryIcon,
   AccountCircleOutlined as UserIcon,
@@ -37,11 +36,11 @@ import {
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useThemeMode } from '../../app/theme/ThemeModeContext'
+import EnergyAssistant from '../assistant/EnergyAssistant'
 
 const NAV_ITEMS = [
   { label: 'Overview', path: '/', icon: <DashboardIcon sx={{ fontSize: 20 }} /> },
   { label: 'Ledger', path: '/ledger', icon: <LedgerIcon sx={{ fontSize: 20 }} /> },
-  { label: 'Bill Scan', path: '/upload', icon: <ScanIcon sx={{ fontSize: 20 }} /> },
   { label: 'Advisory', path: '/recommendations', icon: <AiIcon sx={{ fontSize: 20 }} /> },
   { label: 'Equipment', path: '/profile', icon: <FactoryIcon sx={{ fontSize: 20 }} /> },
 ]
@@ -78,50 +77,26 @@ export default function AppShell() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      {/* Top Navbar */}
       <AppBar
         position="sticky"
         elevation={0}
         sx={{
-          bgcolor: isDark ? '#09090B' : '#FFFFFF',
-          borderBottom: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0'}`,
+          bgcolor: 'background.default',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
           color: 'text.primary',
         }}
       >
-        <Toolbar variant="dense" sx={{ minHeight: 52, justifyContent: 'space-between', px: { xs: 1.5, sm: 2.5 } }}>
+        <Toolbar variant="dense" sx={{ minHeight: 60, justifyContent: 'space-between', px: { xs: 1.5, sm: 3 } }}>
           {/* Brand */}
           <Box
             sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
             onClick={() => navigate('/')}
           >
-            <Box
-              sx={{
-                width: 28,
-                height: 28,
-                borderRadius: 1,
-                bgcolor: isDark ? 'primary.main' : 'primary.main',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: isDark ? '#09090B' : '#FFFFFF',
-              }}
-            >
+            <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'primary.contrastText' }}>
               <EnergyIcon sx={{ fontSize: 18 }} />
             </Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              Energize<span style={{ color: isDark ? '#10B981' : '#0F766E' }}>U</span>
-            </Typography>
-            <Chip
-              label="MSME"
-              size="small"
-              sx={{
-                height: 18,
-                fontSize: '0.65rem',
-                fontWeight: 700,
-                bgcolor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F1F5F9',
-                color: 'text.secondary',
-              }}
-            />
+            <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>Energize<span style={{ color: isDark ? '#34D399' : '#0F766E' }}>U</span></Typography>
           </Box>
 
           {/* Right Controls: Facility badge + Theme toggle + Profile */}
@@ -147,7 +122,8 @@ export default function AppShell() {
                 size="small"
                 sx={{
                   color: 'text.secondary',
-                  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0'}`,
+                  border: '1px solid',
+                  borderColor: 'divider',
                   borderRadius: 1.5,
                   p: 0.75,
                 }}
@@ -212,13 +188,14 @@ export default function AppShell() {
                 width: 200,
                 boxSizing: 'border-box',
                 position: 'relative',
-                bgcolor: isDark ? '#0C0C0E' : '#F8FAFC',
-                borderRight: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.06)' : '#E2E8F0'}`,
-                pt: 1.5,
+                bgcolor: 'background.default',
+                borderRight: '1px solid',
+                borderColor: 'divider',
+                pt: 2,
               },
             }}
           >
-            <List sx={{ px: 1 }}>
+            <List sx={{ px: 1.5 }}>
               {NAV_ITEMS.map((item) => {
                 const isSelected =
                   item.path === '/'
@@ -230,12 +207,12 @@ export default function AppShell() {
                     selected={isSelected}
                     onClick={() => navigate(item.path)}
                     sx={{
-                      borderRadius: 1,
-                      mb: 0.5,
-                      py: 0.8,
+                      borderRadius: 1.5,
+                      mb: 0.35,
+                      py: 1,
                       px: 1.25,
                       '&.Mui-selected': {
-                        bgcolor: isDark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(15, 118, 110, 0.08)',
+                        bgcolor: isDark ? 'rgba(52, 211, 153, 0.12)' : 'rgba(15, 118, 110, 0.08)',
                         color: isDark ? 'primary.light' : 'primary.main',
                         '& .MuiListItemIcon-root': {
                           color: isDark ? 'primary.main' : 'primary.main',
@@ -263,8 +240,8 @@ export default function AppShell() {
           maxWidth="lg"
           sx={{
             flex: 1,
-            py: 2.5,
-            px: { xs: 1.5, sm: 2.5 },
+            py: { xs: 2, sm: 3.5 },
+            px: { xs: 1.5, sm: 4 },
             pb: { xs: 9, sm: 3 },
           }}
         >
@@ -322,6 +299,7 @@ export default function AppShell() {
           </BottomNavigation>
         </Paper>
       )}
+      <EnergyAssistant />
     </Box>
   )
 }

@@ -23,7 +23,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SU
 const groqApiKey = process.env.GROQ_API_KEY || ''
 const openRouterApiKey = process.env.OPENROUTER_API_KEY || ''
 const aiVisionModel = process.env.AI_VISION_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct'
-const aiReasoningModel = process.env.AI_REASONING_MODEL || 'meta-llama/llama-3.3-70b-instruct:free'
+const aiReasoningModel = process.env.AI_REASONING_MODEL || ''
 
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
 
@@ -195,9 +195,9 @@ app.post('/api/generate-recommendations', async (req, res) => {
       return res.status(400).json({ error: 'Missing businessId in request body' })
     }
 
-    if (!openRouterApiKey) {
+    if (!openRouterApiKey || !aiReasoningModel) {
       return res.status(500).json({
-        error: 'OPENROUTER_API_KEY is not configured in supabase/.env. Please check your credentials.',
+        error: 'OPENROUTER_API_KEY and AI_REASONING_MODEL must be configured in supabase/.env.',
       })
     }
 
@@ -295,6 +295,87 @@ Return ONLY a JSON object with this shape:
   } catch (err) {
     console.error('[generate-recommendations exception]:', err)
     return res.status(500).json({ error: err.message || 'Internal server error during recommendations' })
+  }
+})
+
+// 4. Energy Assistant Endpoint
+app.post('/api/energy-chat', async (req, res) => {
+  try {
+    const { businessId, message, history = [] } = req.body
+
+    if (!businessId || !message?.trim()) {
+      return res.status(400).json({ error: 'businessId and message are required' })
+    }
+    if (!openRouterApiKey || !aiReasoningModel) {
+      return res.status(503).json({ error: 'The energy assistant is not configured yet.' })
+    }
+
+    if (!supabase) {
+      return res.status(503).json({ error: 'Live business data is unavailable.' })
+    }
+
+    const [businessRes, machinesRes, entriesRes, outputRes, recommendationsRes, benchmarkRes] = await Promise.all([
+      supabase.from('businesses').select('*').eq('business_id', businessId).maybeSingle(),
+      supabase.from('machines').select('*').eq('business_id', businessId),
+      supabase.from('energy_entries').select('*').eq('business_id', businessId).order('period_end', { ascending: false }).limit(40),
+      supabase.from('output_records').select('*').eq('business_id', businessId).order('period_end', { ascending: false }).limit(6),
+      supabase.from('recommendations').select('*').eq('business_id', businessId).order('created_at', { ascending: false }).limit(6),
+      supabase.from('sector_benchmarks').select('*').limit(1).maybeSingle(),
+    ])
+
+    const dataContext = {
+      business: businessRes.data,
+      machines: machinesRes.data || [],
+      energy_entries: entriesRes.data || [],
+      output_records: outputRes.data || [],
+      recommendations: recommendationsRes.data || [],
+      sector_benchmark: benchmarkRes.data,
+    }
+
+    const systemPrompt = `You are Energize U's energy analyst for an Indian MSME owner. Answer in concise, plain English.
+Use only the supplied business data. Do not invent prices, usage, savings, benchmarks, machines, dates, or recommendations.
+If the data is insufficient, say exactly what is missing and suggest the smallest next logging action.
+You can explain trends, compare logged energy sources, summarize existing recommendations, and suggest questions for an energy audit.
+Never claim to have changed data or run an action. Keep answers practical and under 180 words.`
+
+    const safeHistory = Array.isArray(history)
+      ? history.slice(-8).filter((item) => item && ['user', 'assistant'].includes(item.role) && typeof item.content === 'string')
+      : []
+
+    const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openRouterApiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://energize-u.app',
+        'X-Title': 'Energize U MSME Platform',
+      },
+      body: JSON.stringify({
+        model: aiReasoningModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'system', content: `Current verified data:\n${JSON.stringify(dataContext)}` },
+          ...safeHistory,
+          { role: 'user', content: message.trim() },
+        ],
+        temperature: 0.2,
+      }),
+    })
+
+    if (!openRouterResponse.ok) {
+      const errText = await openRouterResponse.text()
+      console.error('[OpenRouter Chat API Error]:', errText)
+      return res.status(502).json({ error: 'The energy assistant could not respond right now.' })
+    }
+
+    const openRouterJson = await openRouterResponse.json()
+    const reply = openRouterJson.choices?.[0]?.message?.content?.trim()
+    if (!reply) return res.status(502).json({ error: 'The energy assistant returned an empty response.' })
+
+    return res.json({ success: true, reply, model: aiReasoningModel })
+  } catch (err) {
+    console.error('[energy-chat exception]:', err)
+    return res.status(500).json({ error: 'The energy assistant is temporarily unavailable.' })
   }
 })
 

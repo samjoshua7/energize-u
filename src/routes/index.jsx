@@ -12,6 +12,7 @@ import LedgerPage from '../features/energyLedger/LedgerPage'
 import UploadPage from '../features/energyEntries/UploadPage'
 import RecommendationsPage from '../features/recommendations/RecommendationsPage'
 import ProfilePage from '../features/businessProfile/ProfilePage'
+import SimulatorPage from '../features/simulator/SimulatorPage'
 
 export default function AppRoutes() {
   return (
@@ -44,6 +45,7 @@ export default function AppRoutes() {
         <Route path="upload" element={<UploadPage />} />
         <Route path="recommendations" element={<RecommendationsPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="simulator" element={<SimulatorPage />} />
       </Route>
 
       {/* Catch-all */}
