@@ -17,6 +17,7 @@ import BenchmarkPage from '../features/benchmarks/BenchmarkPage'
 import EmissionsPage from '../features/emissions/EmissionsPage'
 import LiveDashboardPage from '../features/liveDemo/LiveDashboardPage'
 import LiveSimulatorPage from '../features/liveDemo/LiveSimulatorPage'
+import MobileDashboardPage from '../features/liveDemo/MobileDashboardPage'
 
 export default function AppRoutes() {
   return (
@@ -24,6 +25,7 @@ export default function AppRoutes() {
       {/* ── Live Demo Routes (no auth, for hackathon two-device demo) ── */}
       <Route path="/live" element={<LiveDashboardPage />} />
       <Route path="/live/simulator" element={<LiveSimulatorPage />} />
+      <Route path="/mobile" element={<MobileDashboardPage />} />
 
       {/* Public Auth Routes */}
       <Route

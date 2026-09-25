@@ -1,0 +1,22 @@
+{
+  "name": "Energize U",
+  "short_name": "Energize",
+  "description": "Multi-fuel energy monitoring for Indian MSMEs",
+  "start_url": "/mobile",
+  "display": "standalone",
+  "background_color": "#14181D",
+  "theme_color": "#D98E2E",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

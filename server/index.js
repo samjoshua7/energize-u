@@ -643,15 +643,178 @@ app.post('/api/simulate/reset', async (req, res) => {
       { account_id, source: 'solar',  status: 'off', updated_at: new Date().toISOString() },
     ], { onConflict: 'account_id,source' })
 
+    // Reset machine costs and consumption logs
+    const { data: demoMachines } = await supabase.from('demo_machines')
+      .select('id').eq('account_id', account_id)
+    if (demoMachines?.length) {
+      const ids = demoMachines.map(m => m.id)
+      await supabase.from('machine_consumption_log').delete().in('machine_id', ids)
+      await supabase.from('demo_machines')
+        .update({ cost_today: 0, kwh_today: 0, updated_at: new Date().toISOString() })
+        .eq('account_id', account_id)
+    }
+
     return res.json({ ok: true, message: 'Demo data reset' })
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }
 })
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 6. PER-MACHINE SIMULATION — sliders on PC#1, live cards on PC#2
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// GET /api/machines/:account_id — all machines with computed live draw
+app.get('/api/machines/:account_id', async (req, res) => {
+  const { account_id } = req.params
+  if (!supabase) return res.status(503).json({ error: 'Supabase not configured' })
+
+  try {
+    const { data: machines, error } = await supabase.from('demo_machines')
+      .select('*')
+      .eq('account_id', account_id)
+      .order('id')
+
+    if (error) throw error
+
+    const enriched = (machines || []).map(m => ({
+      ...m,
+      power_draw_kw: m.status === 'running'
+        ? parseFloat((m.base_power_kw * m.current_load_percent / 100).toFixed(3))
+        : 0,
+    }))
+
+    const totalLoadKw = enriched.reduce((s, m) => s + m.power_draw_kw, 0)
+    const totalCostToday = enriched.reduce((s, m) => s + parseFloat(m.cost_today || 0), 0)
+    const totalKwhToday = enriched.reduce((s, m) => s + parseFloat(m.kwh_today || 0), 0)
+
+    return res.json({
+      machines: enriched,
+      total_load_kw: parseFloat(totalLoadKw.toFixed(3)),
+      total_cost_today: parseFloat(totalCostToday.toFixed(2)),
+      total_kwh_today: parseFloat(totalKwhToday.toFixed(3)),
+      timestamp: new Date().toISOString(),
+    })
+  } catch (err) {
+    console.error('[machines list error]:', err)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/machines/:machine_id/adjust — { load_percent, status }
+app.post('/api/machines/:machine_id/adjust', async (req, res) => {
+  const { machine_id } = req.params
+  const { load_percent, status } = req.body
+  if (!supabase) return res.status(503).json({ error: 'Supabase not configured' })
+
+  const updates = { updated_at: new Date().toISOString() }
+  if (load_percent !== undefined) {
+    updates.current_load_percent = Math.max(0, Math.min(100, Math.round(load_percent)))
+  }
+  if (status && ['running', 'idle', 'off'].includes(status)) {
+    updates.status = status
+    if (status !== 'running') updates.current_load_percent = 0
+  }
+
+  try {
+    const { data, error } = await supabase.from('demo_machines')
+      .update(updates)
+      .eq('id', machine_id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    return res.json({
+      ok: true,
+      machine: {
+        ...data,
+        power_draw_kw: data.status === 'running'
+          ? parseFloat((data.base_power_kw * data.current_load_percent / 100).toFixed(3))
+          : 0,
+      },
+    })
+  } catch (err) {
+    console.error('[machine adjust error]:', err)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/machines/:machine_id/history?minutes=5
+app.get('/api/machines/:machine_id/history', async (req, res) => {
+  const { machine_id } = req.params
+  const minutes = Math.min(parseInt(req.query.minutes) || 5, 30)
+  if (!supabase) return res.status(503).json({ error: 'Supabase not configured' })
+
+  const since = new Date(Date.now() - minutes * 60 * 1000).toISOString()
+
+  try {
+    const { data, error } = await supabase.from('machine_consumption_log')
+      .select('logged_at, power_draw_kw, cost_accrued, load_percent')
+      .eq('machine_id', machine_id)
+      .gte('logged_at', since)
+      .order('logged_at', { ascending: true })
+
+    if (error) throw error
+    return res.json({ history: data || [], count: (data || []).length })
+  } catch (err) {
+    console.error('[machine history error]:', err)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// ── Consumption Ticker ─────────────────────────────────────────────
+// Every 2 seconds: for each running machine, log consumption + accrue cost
+const TICK_SECONDS = 2
+const TICK_HOURS = TICK_SECONDS / 3600
+
+setInterval(async () => {
+  if (!supabase) return
+  try {
+    const { data: machines } = await supabase.from('demo_machines')
+      .select('*')
+      .eq('status', 'running')
+      .gt('current_load_percent', 0)
+
+    if (!machines?.length) return
+
+    const now = new Date().toISOString()
+    const logs = []
+
+    for (const m of machines) {
+      const drawKw = m.base_power_kw * m.current_load_percent / 100
+      const kwhConsumed = drawKw * TICK_HOURS
+      const costIncurred = kwhConsumed * GRID_COST_PER_KWH
+
+      logs.push({
+        machine_id: m.id,
+        logged_at: now,
+        power_draw_kw: parseFloat(drawKw.toFixed(3)),
+        cost_accrued: parseFloat(costIncurred.toFixed(4)),
+        load_percent: m.current_load_percent,
+      })
+
+      // Accumulate on the machine row (fire-and-forget individual updates)
+      supabase.from('demo_machines')
+        .update({
+          cost_today: parseFloat((parseFloat(m.cost_today) + costIncurred).toFixed(2)),
+          kwh_today: parseFloat((parseFloat(m.kwh_today) + kwhConsumed).toFixed(3)),
+          updated_at: now,
+        })
+        .eq('id', m.id)
+        .then(() => {})
+        .catch(() => {})
+    }
+
+    await supabase.from('machine_consumption_log').insert(logs)
+  } catch {
+    // Silent — do not crash the server on ticker errors
+  }
+}, TICK_SECONDS * 1000)
+
 app.listen(PORT, () => {
   console.log(`[Energize U Backend] Running on http://localhost:${PORT}`)
   console.log(`[Energize U Backend] Groq OCR ready: ${Boolean(groqApiKey)}`)
   console.log(`[Energize U Backend] OpenRouter Advisor ready: ${Boolean(openRouterApiKey)}`)
+  console.log(`[Energize U Backend] Machine consumption ticker: every ${TICK_SECONDS}s`)
 })
-
