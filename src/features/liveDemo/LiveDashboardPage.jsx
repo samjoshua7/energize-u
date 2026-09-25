@@ -1,17 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Box, Typography, CircularProgress, Chip } from '@mui/material'
 import {
-  FlashOn as FlashOnIcon, FlashOff as FlashOffIcon, WarningAmber as WarnIcon,
-  LocalGasStation as DieselIcon, Bolt as BoltIcon, Co2 as Co2Icon, Speed as LoadIcon,
+  FlashOn as FlashOnIcon, FlashOff as FlashOffIcon,
+  LocalGasStation as DieselIcon, Bolt as BoltIcon, Co2 as Co2Icon,
+  Speed as LoadIcon, PowerSettingsNew as PowerIcon, TrendingUp as TrendIcon,
 } from '@mui/icons-material'
 import {
-  AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  LineChart, Line,
 } from 'recharts'
 import { fetchStatus, fetchEvents, fetchMachines, healthCheck } from './api'
 
 const POLL_MS = 2000
-const MAX_CHART = 120
-const MAX_SPARK = 60
+const MAX_TIMELINE = 90
 
 export default function LiveDashboardPage() {
   const [status, setStatus] = useState(null)
@@ -20,9 +21,9 @@ export default function LiveDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [coldStart, setColdStart] = useState(true)
   const [error, setError] = useState(null)
-  const [costChart, setCostChart] = useState([])
-  const [sparklines, setSparklines] = useState({}) // { machineId: [{t, kw}] }
-  const prevLoadRef = useRef({})
+  const [timeline, setTimeline] = useState([])       // stacked power over time
+  const [sparklines, setSparklines] = useState({})
+  const prevRef = useRef({})
 
   // Boot
   useEffect(() => {
@@ -31,8 +32,8 @@ export default function LiveDashboardPage() {
       try {
         await healthCheck(); if (c) return; setColdStart(false)
         const [s, e, m] = await Promise.all([fetchStatus(), fetchEvents(30), fetchMachines()])
-        if (!c) { setStatus(s); setEvents(e.events||[]); setMachineData(m); setError(null) }
-      } catch (err) { if (!c) setError('Backend not reachable') }
+        if (!c) { setStatus(s); setEvents(e.events || []); setMachineData(m); setError(null) }
+      } catch { if (!c) setError('Backend not reachable') }
       finally { if (!c) setLoading(false) }
     })()
     return () => { c = true }
@@ -44,27 +45,32 @@ export default function LiveDashboardPage() {
     const poll = async () => {
       try {
         const [s, e, m] = await Promise.all([fetchStatus(), fetchEvents(30), fetchMachines()])
-        setStatus(s); setEvents(e.events||[]); setMachineData(m); setError(null)
+        setStatus(s); setEvents(e.events || []); setMachineData(m); setError(null)
 
         const now = new Date()
-        const timeStr = now.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', second:'2-digit' })
+        const ts = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-        // Cost chart accumulation
-        if (s?.today) {
-          setCostChart(prev => {
-            const next = [...prev, { time: timeStr, grid: s.today.grid_cost, genset: s.today.genset_cost }]
-            return next.length > MAX_CHART ? next.slice(-MAX_CHART) : next
-          })
-        }
-
-        // Sparkline accumulation per machine
+        // Build stacked timeline point: one key per machine name
         if (m?.machines) {
+          setTimeline(prev => {
+            const point = { time: ts }
+            let totalKw = 0
+            for (const mc of m.machines) {
+              point[mc.name] = mc.power_draw_kw
+              totalKw += mc.power_draw_kw
+            }
+            point._total = totalKw
+            const next = [...prev, point]
+            return next.length > MAX_TIMELINE ? next.slice(-MAX_TIMELINE) : next
+          })
+
+          // Sparklines per machine
           setSparklines(prev => {
             const next = { ...prev }
             for (const mc of m.machines) {
               const arr = next[mc.id] || []
-              arr.push({ t: timeStr, kw: mc.power_draw_kw })
-              next[mc.id] = arr.length > MAX_SPARK ? arr.slice(-MAX_SPARK) : arr
+              arr.push({ t: ts, kw: mc.power_draw_kw })
+              next[mc.id] = arr.length > 60 ? arr.slice(-60) : arr
             }
             return next
           })
@@ -76,21 +82,38 @@ export default function LiveDashboardPage() {
     return () => clearInterval(tid)
   }, [loading])
 
+  // Detect changes for pulse animation
+  const changedIds = useMemo(() => {
+    const ids = new Set()
+    if (machineData?.machines) {
+      for (const m of machineData.machines) {
+        if (prevRef.current[m.id] !== undefined && prevRef.current[m.id] !== m.power_draw_kw) {
+          ids.add(m.id)
+        }
+      }
+      // Update refs after comparison
+      const next = {}
+      for (const m of machineData.machines) next[m.id] = m.power_draw_kw
+      setTimeout(() => { prevRef.current = next }, 1000)
+    }
+    return ids
+  }, [machineData])
+
   if (loading) {
     return (
-      <Box sx={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-        <CircularProgress sx={{ color: 'var(--color-amber)' }} />
-        <Typography sx={{ color: 'var(--color-ink-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.875rem' }}>
-          {coldStart ? 'Waking up backend (cold start)…' : 'Connecting…'}
+      <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: '#0D1117', gap: 2 }}>
+        <CircularProgress sx={{ color: '#D98E2E' }} />
+        <Typography sx={{ color: '#8B949E', fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.85rem' }}>
+          {coldStart ? 'Waking up backend…' : 'Connecting to live feed…'}
         </Typography>
       </Box>
     )
   }
+
   if (error && !status) {
     return (
-      <Box sx={{ p: 4, textAlign: 'center' }}>
-        <WarnIcon sx={{ fontSize: 40, color: 'var(--color-rust)', mb: 1 }} />
-        <Typography sx={{ color: 'var(--color-ink)' }}>{error}</Typography>
+      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#0D1117' }}>
+        <Typography sx={{ color: '#F85149' }}>{error}</Typography>
       </Box>
     )
   }
@@ -99,102 +122,202 @@ export default function LiveDashboardPage() {
   const gensetOn = status?.genset?.status === 'on'
   const today = status?.today || {}
   const machines = machineData?.machines || []
+  const totalLoad = machineData?.total_load_kw || 0
+  const maxPossibleLoad = machines.reduce((s, m) => s + parseFloat(m.base_power_kw || 0), 0)
+  const loadPct = maxPossibleLoad > 0 ? ((totalLoad / maxPossibleLoad) * 100).toFixed(0) : 0
+
+  // Colors for stacked chart
+  const MACHINE_COLORS = ['#D98E2E', '#6E9B7B', '#C1553A', '#58A6FF', '#BC8CFF']
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, maxWidth: 1060, mx: 'auto', py: 3, px: 2 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#0D1117', color: '#E6EDF3', fontFamily: "'IBM Plex Sans', sans-serif" }}>
 
-      {/* ── Status Banner ──────────────────────────────────── */}
+      {/* ══════ Top Status Bar ══════ */}
       <Box sx={{
-        p: 2, display: 'flex', alignItems: 'center', gap: 2, borderRadius: '6px',
-        border: `1.5px solid ${gridOn ? 'var(--color-sage)' : 'var(--color-rust)'}`,
-        bgcolor: gridOn ? 'rgba(110,155,123,.06)' : 'rgba(193,85,58,.06)',
-        transition: 'all 0.4s',
+        px: 3, py: 1.5, display: 'flex', alignItems: 'center', gap: 3,
+        borderBottom: `2px solid ${gridOn ? '#238636' : '#F85149'}`,
+        bgcolor: gridOn ? 'rgba(35,134,54,.06)' : 'rgba(248,81,73,.06)',
+        flexWrap: 'wrap',
       }}>
-        {gridOn
-          ? <FlashOnIcon sx={{ fontSize: 28, color: 'var(--color-sage)' }} />
-          : <FlashOffIcon sx={{ fontSize: 28, color: 'var(--color-rust)', animation: 'pulse-glow 1.5s ease-in-out infinite',
-              '@keyframes pulse-glow': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.4 } } }} />}
-        <Box sx={{ flex: 1 }}>
-          <Typography sx={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: gridOn ? 'var(--color-sage)' : 'var(--color-rust)' }}>
-            {gridOn ? 'DISCOM Grid: Active' : '⚠️ GRID DOWN — Genset Running'}
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>
-            {gridOn ? 'All systems on mains power' : `Diesel genset auto-started · ${formatDur(status?.genset_running?.running_seconds||0)}`}
+        {/* Grid status */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {gridOn
+            ? <FlashOnIcon sx={{ color: '#238636', fontSize: 22 }} />
+            : <FlashOffIcon sx={{ color: '#F85149', fontSize: 22, animation: 'blink 1s infinite', '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.3 } } }} />}
+          <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, fontSize: '0.85rem', color: gridOn ? '#238636' : '#F85149' }}>
+            {gridOn ? 'DISCOM GRID ACTIVE' : '⚠ GRID DOWN — GENSET RUNNING'}
           </Typography>
         </Box>
+
         {gensetOn && status?.genset_running && (
-          <Box sx={{ textAlign: 'right' }}>
-            <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-amber)' }}>
-              ₹{status.genset_running.cost_so_far.toFixed(0)}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
-              {status.genset_running.diesel_so_far.toFixed(3)} L
-            </Typography>
-          </Box>
+          <Chip icon={<DieselIcon sx={{ fontSize: 14 }} />}
+            label={`Genset: ${status.genset_running.diesel_so_far.toFixed(2)}L · ₹${status.genset_running.cost_so_far.toFixed(0)}`}
+            size="small" sx={{
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.7rem', fontWeight: 600,
+              bgcolor: 'rgba(248,81,73,.1)', color: '#F85149', border: '1px solid #F85149',
+              '& .MuiChip-icon': { color: '#F85149' },
+            }}
+          />
         )}
-      </Box>
 
-      {/* ── Total Live Load + Top Metrics ─────────────────── */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr 1fr 1fr' }, gap: 1.5 }}>
-        <MetricCard icon={<LoadIcon />} label="Total Live Load" value={`${machineData?.total_load_kw?.toFixed(1) || '0'} kW`}
-          accent="var(--color-amber)" large />
-        <MetricCard icon={<BoltIcon />} label="Cost Today" value={`₹${today.total_cost?.toFixed(0) || '0'}`} accent="var(--color-amber)" />
-        <MetricCard icon={<DieselIcon />} label="Diesel Used" value={`${today.diesel_litres?.toFixed(2) || '0'} L`} accent="var(--color-rust)" />
-        <MetricCard icon={<Co2Icon />} label="CO₂ Today" value={`${today.co2_kg?.toFixed(1) || '0'} kg`} accent="var(--color-ink-muted)" />
-        <MetricCard icon={<BoltIcon />} label="Grid kWh" value={`${today.grid_kwh?.toFixed(0) || '0'}`} accent="var(--color-sage)" />
-      </Box>
+        <Box sx={{ flex: 1 }} />
 
-      {/* ── Machine Cards Grid ────────────────────────────── */}
-      <Box>
-        <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--color-ink)', mb: 1.5 }}>
-          Live Machine Telemetry
+        {/* Live clock */}
+        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.7rem', color: '#8B949E' }}>
+          LIVE · polling every 2s
         </Typography>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
-          {machines.map(m => (
-            <MachineCard key={m.id} machine={m} sparkData={sparklines[m.id] || []}
-              prevLoad={prevLoadRef.current[m.id]} />
-          ))}
+      </Box>
+
+      {/* ══════ Main Content ══════ */}
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, gap: 0 }}>
+
+        {/* ── Left Column: Plant Vitals + Machine Cards ── */}
+        <Box sx={{ flex: 1, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2.5, minWidth: 0 }}>
+
+          {/* Plant Vitals Header */}
+          <Box sx={{
+            display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr 1fr 1fr' }, gap: 1.5,
+          }}>
+            {/* Total Load — hero metric */}
+            <Box sx={{
+              p: 2, borderRadius: '8px', border: '1px solid #30363D', bgcolor: '#161B22',
+              gridColumn: { xs: 'span 2', sm: 'span 1' }, position: 'relative', overflow: 'hidden',
+            }}>
+              {/* Animated fill bar */}
+              <Box sx={{
+                position: 'absolute', bottom: 0, left: 0, right: 0,
+                height: `${Math.min(loadPct, 100)}%`,
+                bgcolor: parseFloat(loadPct) > 80 ? 'rgba(248,81,73,.08)' : 'rgba(217,142,46,.08)',
+                transition: 'height 0.6s ease',
+              }} />
+              <Box sx={{ position: 'relative' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                  <LoadIcon sx={{ fontSize: 14, color: '#D98E2E' }} />
+                  <Typography sx={{ fontSize: '0.6rem', color: '#8B949E', textTransform: 'uppercase', letterSpacing: 1 }}>Plant Load</Typography>
+                </Box>
+                <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '1.75rem', fontWeight: 700, lineHeight: 1 }}>
+                  {totalLoad.toFixed(1)}
+                  <span style={{ fontSize: '0.7rem', fontWeight: 400, marginLeft: 2, color: '#8B949E' }}>kW</span>
+                </Typography>
+                <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.65rem', color: '#8B949E', mt: 0.5 }}>
+                  {loadPct}% of {maxPossibleLoad.toFixed(0)} kW capacity
+                </Typography>
+              </Box>
+            </Box>
+
+            <VitalCard icon={<BoltIcon />} label="COST TODAY" value={`₹${today.total_cost?.toFixed(0) || '0'}`}
+              sub={`Grid ₹${today.grid_cost?.toFixed(0) || '0'} · Gen ₹${today.genset_cost?.toFixed(0) || '0'}`} color="#D98E2E" />
+            <VitalCard icon={<DieselIcon />} label="DIESEL" value={`${today.diesel_litres?.toFixed(2) || '0.00'} L`}
+              sub={`₹${((today.diesel_litres || 0) * 90).toFixed(0)} worth`} color="#F85149" />
+            <VitalCard icon={<Co2Icon />} label="CO₂ EMITTED" value={`${today.co2_kg?.toFixed(1) || '0'} kg`}
+              sub={`Grid ${today.grid_co2_kg?.toFixed(1) || '0'} + Gen ${today.genset_co2_kg?.toFixed(1) || '0'}`} color="#8B949E" />
+            <VitalCard icon={<TrendIcon />} label="GRID kWh" value={`${today.grid_kwh?.toFixed(0) || '0'}`}
+              sub={`@ ₹${status?.constants?.grid_cost_per_kwh || 8}/kWh`} color="#238636" />
+          </Box>
+
+          {/* Machine Vitals Grid */}
+          <Box>
+            <Typography sx={{ fontSize: '0.7rem', color: '#8B949E', textTransform: 'uppercase', letterSpacing: 1.5, mb: 1.5 }}>
+              Machine Vitals — Live
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' }, gap: 1.5 }}>
+              {machines.map((m, i) => (
+                <MachineVitalCard
+                  key={m.id}
+                  machine={m}
+                  sparkData={sparklines[m.id] || []}
+                  color={MACHINE_COLORS[i % MACHINE_COLORS.length]}
+                  changed={changedIds.has(m.id)}
+                />
+              ))}
+            </Box>
+          </Box>
+
+          {/* Event Log */}
+          <Box sx={{ border: '1px solid #30363D', borderRadius: '8px', bgcolor: '#161B22', p: 2 }}>
+            <Typography sx={{ fontSize: '0.7rem', color: '#8B949E', textTransform: 'uppercase', letterSpacing: 1.5, mb: 1 }}>
+              Event Log ({events.length})
+            </Typography>
+            {events.length === 0
+              ? <Typography sx={{ color: '#484F58', fontSize: '0.8rem', textAlign: 'center', py: 2 }}>No events yet — use simulator to trigger outages</Typography>
+              : events.slice(0, 12).map(evt => <EventRow key={evt.id} event={evt} />)}
+          </Box>
         </Box>
-      </Box>
 
-      {/* Update prevLoad for change detection */}
-      <PrevLoadUpdater machines={machines} prevLoadRef={prevLoadRef} />
+        {/* ── Right Column: Power Timeline Chart ── */}
+        <Box sx={{
+          width: { xs: '100%', lg: 420 }, p: 2.5,
+          borderLeft: { lg: '1px solid #21262D' },
+          display: 'flex', flexDirection: 'column', gap: 2.5,
+        }}>
+          {/* Stacked Power Draw Chart */}
+          <Box sx={{ border: '1px solid #30363D', borderRadius: '8px', bgcolor: '#161B22', p: 2 }}>
+            <Typography sx={{ fontSize: '0.7rem', color: '#8B949E', textTransform: 'uppercase', letterSpacing: 1.5, mb: 0.5 }}>
+              Live Power Draw — All Machines
+            </Typography>
+            <Typography sx={{ fontSize: '0.6rem', color: '#484F58', fontFamily: "'IBM Plex Mono', monospace", mb: 2 }}>
+              Stacked kW by machine · {timeline.length} data points
+            </Typography>
+            <Box sx={{ width: '100%', height: 260 }}>
+              <ResponsiveContainer>
+                <AreaChart data={timeline} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
+                  <XAxis dataKey="time" tick={{ fill: '#484F58', fontSize: 8, fontFamily: 'IBM Plex Mono' }} stroke="#21262D" interval="preserveStartEnd" minTickGap={50} />
+                  <YAxis tick={{ fill: '#484F58', fontSize: 8, fontFamily: 'IBM Plex Mono' }} stroke="#21262D" tickFormatter={v => `${v}kW`} width={42} />
+                  <Tooltip content={<PowerTooltip />} />
+                  {machines.map((m, i) => (
+                    <Area key={m.id} type="monotone" dataKey={m.name} stackId="power"
+                      stroke={MACHINE_COLORS[i % MACHINE_COLORS.length]}
+                      fill={MACHINE_COLORS[i % MACHINE_COLORS.length]}
+                      fillOpacity={0.3} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                  ))}
+                </AreaChart>
+              </ResponsiveContainer>
+            </Box>
+          </Box>
 
-      {/* ── Cost Accumulation Chart ───────────────────────── */}
-      <Box sx={{ border: '1px solid var(--color-line)', borderRadius: '6px', bgcolor: 'var(--color-surface)', p: 2.5 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--color-ink)', mb: 0.5 }}>
-          Live Cost Accumulation
-        </Typography>
-        <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)', display: 'block', mb: 2 }}>
-          Cumulative ₹ by source — updates every 2s
-        </Typography>
-        <Box sx={{ width: '100%', height: 240 }}>
-          <ResponsiveContainer>
-            <AreaChart data={costChart} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gf" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--color-sage)" stopOpacity={.3} /><stop offset="95%" stopColor="var(--color-sage)" stopOpacity={0} /></linearGradient>
-                <linearGradient id="df" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--color-rust)" stopOpacity={.4} /><stop offset="95%" stopColor="var(--color-rust)" stopOpacity={0} /></linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
-              <XAxis dataKey="time" tick={{ fill: 'var(--color-ink-muted)', fontSize: 9, fontFamily: 'IBM Plex Mono' }} stroke="var(--color-line)" interval="preserveStartEnd" minTickGap={60} />
-              <YAxis tick={{ fill: 'var(--color-ink-muted)', fontSize: 9, fontFamily: 'IBM Plex Mono' }} stroke="var(--color-line)" tickFormatter={v=>`₹${v}`} width={50} />
-              <Tooltip content={<CostTooltip />} />
-              <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: '0.7rem', fontFamily: 'IBM Plex Mono' }} />
-              <Area type="monotone" dataKey="grid" name="Grid ₹" stroke="var(--color-sage)" fill="url(#gf)" strokeWidth={2} dot={false} isAnimationActive={false} />
-              <Area type="monotone" dataKey="genset" name="Genset ₹" stroke="var(--color-rust)" fill="url(#df)" strokeWidth={2} dot={false} isAnimationActive={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+          {/* Cost Accumulation Chart */}
+          <Box sx={{ border: '1px solid #30363D', borderRadius: '8px', bgcolor: '#161B22', p: 2 }}>
+            <Typography sx={{ fontSize: '0.7rem', color: '#8B949E', textTransform: 'uppercase', letterSpacing: 1.5, mb: 0.5 }}>
+              Cost Accumulation — ₹
+            </Typography>
+            <Typography sx={{ fontSize: '0.6rem', color: '#484F58', fontFamily: "'IBM Plex Mono', monospace", mb: 2 }}>
+              Grid vs Genset cumulative spend
+            </Typography>
+            <Box sx={{ width: '100%', height: 180 }}>
+              <ResponsiveContainer>
+                <AreaChart data={timeline} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
+                  <XAxis dataKey="time" tick={false} stroke="#21262D" />
+                  <YAxis tick={{ fill: '#484F58', fontSize: 8, fontFamily: 'IBM Plex Mono' }} stroke="#21262D" width={35} />
+                  <Area type="monotone" dataKey="_total" stroke="#D98E2E" fill="#D98E2E" fillOpacity={0.1} strokeWidth={2} dot={false} isAnimationActive={false} name="Total kW" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </Box>
+          </Box>
+
+          {/* Machine Legend */}
+          <Box sx={{ border: '1px solid #30363D', borderRadius: '8px', bgcolor: '#161B22', p: 2 }}>
+            <Typography sx={{ fontSize: '0.7rem', color: '#8B949E', textTransform: 'uppercase', letterSpacing: 1.5, mb: 1.5 }}>
+              Machine Index
+            </Typography>
+            {machines.map((m, i) => {
+              const pct = maxPossibleLoad > 0 ? ((m.power_draw_kw / maxPossibleLoad) * 100).toFixed(1) : 0
+              return (
+                <Box key={m.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.75, borderBottom: '1px solid #21262D' }}>
+                  <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: MACHINE_COLORS[i % MACHINE_COLORS.length], flexShrink: 0 }} />
+                  <Typography sx={{ flex: 1, fontSize: '0.75rem', color: '#E6EDF3' }}>{m.name}</Typography>
+                  <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.7rem', fontWeight: 600, color: '#E6EDF3', minWidth: 55, textAlign: 'right' }}>
+                    {m.power_draw_kw.toFixed(1)} kW
+                  </Typography>
+                  <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.6rem', color: '#8B949E', minWidth: 35, textAlign: 'right' }}>
+                    {pct}%
+                  </Typography>
+                </Box>
+              )
+            })}
+          </Box>
         </Box>
-      </Box>
-
-      {/* ── Event Log ─────────────────────────────────────── */}
-      <Box>
-        <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--color-ink)', pb: 1, borderBottom: '1px solid var(--color-line)' }}>
-          Event Log ({events.length})
-        </Typography>
-        {events.length === 0
-          ? <Typography variant="body2" sx={{ color: 'var(--color-ink-muted)', p: 2, textAlign: 'center' }}>No events yet</Typography>
-          : events.slice(0, 20).map(evt => <EventRow key={evt.id} event={evt} />)}
       </Box>
     </Box>
   )
@@ -202,136 +325,165 @@ export default function LiveDashboardPage() {
 
 // ─── Sub-components ──────────────────────────────────────────────────
 
-function MetricCard({ icon, label, value, accent, large }) {
+function VitalCard({ icon, label, value, sub, color }) {
   return (
-    <Box sx={{
-      p: 1.5, border: '1px solid var(--color-line)', borderRadius: '6px', bgcolor: 'var(--color-surface)',
-      gridColumn: large ? { xs: 'span 2', sm: 'span 1' } : undefined,
-    }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
-        {React.cloneElement(icon, { sx: { fontSize: 14, color: accent } })}
-        <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)', fontSize: '0.65rem' }}>{label}</Typography>
+    <Box sx={{ p: 1.5, borderRadius: '8px', border: '1px solid #30363D', bgcolor: '#161B22' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+        {React.cloneElement(icon, { sx: { fontSize: 12, color } })}
+        <Typography sx={{ fontSize: '0.55rem', color: '#8B949E', textTransform: 'uppercase', letterSpacing: 1 }}>{label}</Typography>
       </Box>
-      <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: large ? '1.4rem' : '1.1rem', fontWeight: 700, color: 'var(--color-ink)' }}>
-        {value}
-      </Typography>
+      <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '1.1rem', fontWeight: 700, lineHeight: 1.2 }}>{value}</Typography>
+      <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.55rem', color: '#484F58', mt: 0.25 }}>{sub}</Typography>
     </Box>
   )
 }
 
-function MachineCard({ machine, sparkData, prevLoad }) {
-  const isRunning = machine.status === 'running'
-  const changed = prevLoad !== undefined && prevLoad !== machine.power_draw_kw
-
-  const statusColor = { running: 'var(--color-sage)', idle: 'var(--color-amber)', off: 'var(--color-ink-muted)' }[machine.status]
+function MachineVitalCard({ machine, sparkData, color, changed }) {
+  const m = machine
+  const isRunning = m.status === 'running'
+  const loadPct = m.current_load_percent
+  const drawKw = m.power_draw_kw
 
   return (
     <Box sx={{
-      p: 2, border: '1px solid var(--color-line)', borderRadius: '6px', bgcolor: 'var(--color-surface)',
-      borderLeft: `3px solid ${statusColor}`,
-      transition: 'box-shadow 0.3s',
-      boxShadow: changed ? `0 0 12px ${statusColor}` : 'none',
-      animation: changed ? 'card-pulse 0.6s ease-out' : 'none',
-      '@keyframes card-pulse': { '0%': { transform: 'scale(1.01)' }, '100%': { transform: 'scale(1)' } },
+      p: 2, borderRadius: '8px', border: '1px solid #30363D', bgcolor: '#161B22',
+      borderLeft: `3px solid ${color}`,
+      transition: 'box-shadow 0.4s, transform 0.3s',
+      boxShadow: changed ? `0 0 20px ${color}50` : 'none',
+      transform: changed ? 'scale(1.01)' : 'scale(1)',
     }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--color-ink)' }}>{machine.name}</Typography>
-        <Chip label={machine.status.toUpperCase()} size="small" sx={{
-          fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700, height: 20,
-          bgcolor: `${statusColor}20`, color: statusColor, border: `1px solid ${statusColor}`,
-        }} />
+      {/* Header: name + status */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+        <Typography sx={{ fontWeight: 600, fontSize: '0.85rem' }}>{m.name}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {isRunning && (
+            <Box sx={{
+              width: 6, height: 6, borderRadius: '50%', bgcolor: '#238636',
+              animation: 'pulse-dot 1.5s infinite',
+              '@keyframes pulse-dot': {
+                '0%': { boxShadow: '0 0 0 0 rgba(35,134,54,.5)' },
+                '70%': { boxShadow: '0 0 0 6px rgba(35,134,54,0)' },
+                '100%': { boxShadow: '0 0 0 0 rgba(35,134,54,0)' },
+              },
+            }} />
+          )}
+          <Typography sx={{
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.6rem', fontWeight: 600,
+            color: isRunning ? '#238636' : m.status === 'idle' ? '#D98E2E' : '#484F58',
+            textTransform: 'uppercase',
+          }}>
+            {m.status}
+          </Typography>
+        </Box>
       </Box>
 
-      {/* Power draw + load */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 1 }}>
-        <Typography sx={{
-          fontFamily: 'var(--font-mono)', fontSize: '1.5rem', fontWeight: 700,
-          color: isRunning ? 'var(--color-ink)' : 'var(--color-ink-muted)',
-          transition: 'color 0.3s',
-        }}>
-          {machine.power_draw_kw.toFixed(1)} <span style={{ fontSize: '0.7rem', fontWeight: 400 }}>kW</span>
-        </Typography>
-        <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--color-ink-muted)' }}>
-          {machine.current_load_percent}% of {machine.base_power_kw}kW
-        </Typography>
+      {/* Big number: power draw */}
+      <Typography sx={{
+        fontFamily: "'IBM Plex Mono', monospace", fontSize: '2rem', fontWeight: 700, lineHeight: 1,
+        color: isRunning ? '#E6EDF3' : '#484F58',
+        transition: 'color 0.3s',
+      }}>
+        {drawKw.toFixed(1)}
+        <span style={{ fontSize: '0.65rem', fontWeight: 400, marginLeft: 3, color: '#8B949E' }}>kW</span>
+      </Typography>
+
+      {/* Load bar */}
+      <Box sx={{ mt: 1.5, mb: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
+          <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.6rem', color: '#8B949E' }}>
+            Load
+          </Typography>
+          <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.6rem', color: '#8B949E' }}>
+            {loadPct}% of {m.base_power_kw} kW
+          </Typography>
+        </Box>
+        <Box sx={{ width: '100%', height: 6, bgcolor: '#21262D', borderRadius: '3px', overflow: 'hidden' }}>
+          <Box sx={{
+            width: `${loadPct}%`, height: '100%', borderRadius: '3px',
+            bgcolor: loadPct > 80 ? '#F85149' : loadPct > 50 ? '#D98E2E' : '#238636',
+            transition: 'width 0.5s ease, background-color 0.5s ease',
+          }} />
+        </Box>
       </Box>
 
       {/* Sparkline */}
-      {sparkData.length > 2 && (
-        <Box sx={{ width: '100%', height: 50, mb: 1 }}>
+      {sparkData.length > 3 && (
+        <Box sx={{ width: '100%', height: 35, my: 0.5 }}>
           <ResponsiveContainer>
-            <LineChart data={sparkData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-              <Line type="monotone" dataKey="kw" stroke={statusColor} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            <LineChart data={sparkData}>
+              <Line type="monotone" dataKey="kw" stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         </Box>
       )}
 
-      {/* Cost today */}
-      <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--color-amber)' }}>
-        ₹{parseFloat(machine.cost_today || 0).toFixed(1)} today · {parseFloat(machine.kwh_today || 0).toFixed(2)} kWh
-      </Typography>
+      {/* Cost row */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px solid #21262D' }}>
+        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.7rem', color: '#D98E2E' }}>
+          ₹{parseFloat(m.cost_today || 0).toFixed(1)}
+        </Typography>
+        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.65rem', color: '#484F58' }}>
+          {parseFloat(m.kwh_today || 0).toFixed(2)} kWh
+        </Typography>
+      </Box>
     </Box>
   )
 }
 
-function PrevLoadUpdater({ machines, prevLoadRef }) {
-  useEffect(() => {
-    const next = {}
-    for (const m of machines) next[m.id] = m.power_draw_kw
-    // Delay so the "changed" detection works for one render cycle
-    const t = setTimeout(() => { prevLoadRef.current = next }, 800)
-    return () => clearTimeout(t)
-  }, [machines, prevLoadRef])
-  return null
-}
-
 function EventRow({ event }) {
-  const labels = { grid_outage: '⚡ Grid Outage', genset_on: '🔥 Genset On', grid_restored: '✅ Grid Restored', genset_off: '🛑 Genset Off' }
+  const labels = { grid_outage: '⚡ Grid Outage', genset_on: '🔥 Genset On', grid_restored: '✅ Restored', genset_off: '🛑 Genset Off' }
   const isOpen = !event.ended_at
   const hasCost = event.cost_incurred && parseFloat(event.cost_incurred) > 0
   const time = new Date(event.started_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
   return (
     <Box sx={{
-      py: 1, px: 0.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      borderBottom: '1px solid var(--color-line)', gap: 1, '&:hover': { bgcolor: 'var(--color-subtle-bg)' },
+      py: 0.75, display: 'flex', alignItems: 'center', gap: 1.5,
+      borderBottom: '1px solid #21262D', '&:last-child': { borderBottom: 'none' },
     }}>
-      <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--color-ink-muted)', width: 70 }}>{time}</Typography>
-      <Box sx={{ flex: 1 }}>
-        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8rem', color: isOpen ? 'var(--color-rust)' : 'var(--color-ink)' }}>
-          {labels[event.event_type] || event.event_type}
-          {isOpen && <Chip label="LIVE" size="small" sx={{ ml: 1, height: 16, fontSize: '0.55rem', fontWeight: 700, bgcolor: 'var(--color-rust)', color: '#fff' }} />}
-        </Typography>
-      </Box>
-      <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--color-ink)', width: 60, textAlign: 'right' }}>
-        {event.duration_seconds != null ? formatDur(event.duration_seconds) : isOpen ? 'ongoing' : '—'}
+      <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.65rem', color: '#484F58', width: 65 }}>{time}</Typography>
+      <Typography sx={{ flex: 1, fontSize: '0.75rem', fontWeight: 600, color: isOpen ? '#F85149' : '#E6EDF3' }}>
+        {labels[event.event_type] || event.event_type}
+        {isOpen && <Chip label="LIVE" size="small" sx={{ ml: 1, height: 14, fontSize: '0.5rem', fontWeight: 700, bgcolor: '#F85149', color: '#fff' }} />}
       </Typography>
-      <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: hasCost ? 600 : 400, color: hasCost ? 'var(--color-amber)' : 'var(--color-ink-muted)', width: 70, textAlign: 'right' }}>
+      <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.65rem', color: '#8B949E', width: 55, textAlign: 'right' }}>
+        {event.duration_seconds != null ? fmtDur(event.duration_seconds) : isOpen ? 'ongoing' : '—'}
+      </Typography>
+      <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.7rem', fontWeight: hasCost ? 600 : 400, color: hasCost ? '#D98E2E' : '#484F58', width: 55, textAlign: 'right' }}>
         {hasCost ? `₹${parseFloat(event.cost_incurred).toFixed(0)}` : '—'}
       </Typography>
     </Box>
   )
 }
 
-function CostTooltip({ active, payload, label }) {
+function PowerTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
   return (
-    <Box sx={{ bgcolor: 'var(--color-surface)', border: '1px solid var(--color-line)', borderRadius: '4px', p: 1.5, minWidth: 140 }}>
-      <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--color-ink-muted)', mb: 0.5 }}>{label}</Typography>
-      {payload.map(e => (
-        <Box key={e.dataKey} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-          <Typography sx={{ fontSize: '0.7rem', color: e.color }}>{e.name}</Typography>
-          <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-ink)' }}>₹{e.value?.toFixed(2)}</Typography>
+    <Box sx={{ bgcolor: '#161B22', border: '1px solid #30363D', borderRadius: '6px', p: 1.5, minWidth: 160 }}>
+      <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.6rem', color: '#8B949E', mb: 0.75 }}>{label}</Typography>
+      {payload.filter(e => e.dataKey !== '_total').map(e => (
+        <Box key={e.dataKey} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, py: 0.15 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '2px', bgcolor: e.color }} />
+            <Typography sx={{ fontSize: '0.65rem', color: '#E6EDF3' }}>{e.dataKey}</Typography>
+          </Box>
+          <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.65rem', fontWeight: 600, color: '#E6EDF3' }}>
+            {e.value?.toFixed(1)} kW
+          </Typography>
         </Box>
       ))}
+      <Box sx={{ borderTop: '1px solid #21262D', mt: 0.5, pt: 0.5, display: 'flex', justifyContent: 'space-between' }}>
+        <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: '#D98E2E' }}>Total</Typography>
+        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.65rem', fontWeight: 700, color: '#D98E2E' }}>
+          {payload.filter(e => e.dataKey !== '_total').reduce((s, e) => s + (e.value || 0), 0).toFixed(1)} kW
+        </Typography>
+      </Box>
     </Box>
   )
 }
 
-function formatDur(s) {
+function fmtDur(s) {
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60), r = s % 60
-  return m < 60 ? `${m}m ${r}s` : `${Math.floor(m/60)}h ${m%60}m`
+  return m < 60 ? `${m}m ${r}s` : `${Math.floor(m / 60)}h ${m % 60}m`
 }
