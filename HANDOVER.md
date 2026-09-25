@@ -107,3 +107,19 @@ Full implementation of **Energize U** (hackathon YUVA) — a multi-fuel energy i
 - Known risks: browser verification unavailable in this session; existing unrelated working changes preserved. Earlier simulator-only completion did not fix the dashboard.
 - Quality score: 9/10 for source correctness and complete Grid import coverage; build and visual verification pending.
 - Exact next task: confirm the fresh build and inspect dashboard KPI spacing, three separate unit metrics, two benchmark columns and chart widths at 360px and 1440px.
+
+
+## Full feature expansion ? database checkpoint (2026-09-25)
+
+- Objective: deliver the user's seven-area product plan as a desktop-first web app with responsive, installable phone access.
+- Decisions: persistence and period-correct reporting first; explicit demo OCR only; preserve verified data; no invented tariffs, percentiles or hourly outage patterns. Detailed scope/audit: FEATURE_DELIVERY.md.
+- Files modified this stage: supabase/migrations/0004_complete_energy_workflows.sql (new), FEATURE_DELIVERY.md (new), HANDOVER.md (appended). Branch: feature/complete-energy-workflows. Earlier working changes preserved.
+- Database changes: setup/output-scale/generator/solar fields; receipt extraction metadata; effort; tariff reference table; protected receipt storage; period reporting; stricter ownership and deletion behavior. See migration and delivery document for compatibility limits.
+- SQL executed: none. Pending: 0004_complete_energy_workflows.sql after existing base migrations. User must execute in Supabase and confirm under Database-First Rule.
+- APIs changed: no JS exports changed. SQL migration proposes get_energy_period_report and updates benchmark matching/security of existing RPCs.
+- Components added: none at this checkpoint. Feature screens are NOT complete.
+- Verification: reviewed against both individual and combined base schemas/policy names, reviewed authorization paths and inclusive-period arithmetic; static transaction/delimiter/security-mode checks passed. No PostgreSQL executable available; no live SQL/RLS tests or production build run for this stage.
+- Remaining TODOs: (1) obtain migration confirmation, (2) implement reliable auth/setup/APIs and bill storage, (3) dashboard/ledger/benchmarks/recommendations/emissions, (4) desktop/mobile design and PWA, (5) end-to-end, RLS and build verification. Optional hourly alerts require timestamped source data.
+- Known risks: legacy local data must not silently mix with live records; tariff table intentionally empty; legacy benchmark figures unverified; existing owner-link constraints are NOT VALID for historical rows. Existing profiles need their output unit confirmed.
+- Quality score: 9/10 for reviewed migration design, not execution or feature completeness; runtime validation outstanding.
+- Exact next task: after user confirms SQL success, follow FEATURE_DELIVERY.md implementation sequence beginning with truthful database error handling and onboarding; do not stop at cosmetic layout changes.

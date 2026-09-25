@@ -90,14 +90,17 @@ alter table public.energy_entries
     references public.bill_uploads(business_id, bill_upload_id) not valid;
 
 -- Preserve bill-linked ledger history. Existing invalid links, if any, need a separate audit.
-drop policy "Owners can delete energy entries" on public.energy_entries;
+drop policy if exists "Owners can delete energy entries" on public.energy_entries;
+drop policy if exists "Owners delete energy entries" on public.energy_entries;
 create policy "Owners can delete unlinked entries" on public.energy_entries
   for delete to authenticated using (
     bill_upload_id is null and business_id in
       (select business_id from public.businesses where owner_id = auth.uid())
   );
-drop policy "Owners can delete bill uploads" on public.bill_uploads;
-drop policy "Owners can delete own business" on public.businesses;
+drop policy if exists "Owners can delete bill uploads" on public.bill_uploads;
+drop policy if exists "Owners delete bill uploads" on public.bill_uploads;
+drop policy if exists "Owners can delete own business" on public.businesses;
+drop policy if exists "Owners delete own business" on public.businesses;
 
 -- Remove the owner-bypassing execution mode of the existing reporting RPC.
 alter function public.get_business_energy_summary(uuid) security invoker;
@@ -125,13 +128,13 @@ create or replace function public.get_energy_period_report(
 returns jsonb language plpgsql stable security invoker set search_path = '' as $$
 declare
   result jsonb;
-  output_unit text;
-  unit_scale numeric;
+  v_output_unit text;
+  v_unit_scale numeric;
 begin
   if p_start is null or p_end is null or p_end < p_start or p_end - p_start > 365 then
     raise exception 'Choose a reporting period between 1 and 366 days';
   end if;
-  select b.primary_output_unit, b.output_unit_scale into output_unit, unit_scale
+  select b.primary_output_unit, b.output_unit_scale into v_output_unit, v_unit_scale
     from public.businesses b where b.business_id = p_business_id and b.owner_id = auth.uid();
   if not found then raise exception 'Business not accessible' using errcode = '42501'; end if;
 
@@ -151,7 +154,7 @@ begin
   ), production_daily as (
     select d.day, sum(o.output_quantity / (o.period_end - o.period_start + 1)) as quantity
     from days d join public.output_records o on d.day between o.period_start and o.period_end
-    where o.business_id = p_business_id and o.output_unit = output_unit
+    where o.business_id = p_business_id and o.output_unit = v_output_unit
     group by d.day
   ), source_totals as (
     select source_type, quantity_unit, round(sum(cost), 2) as cost,
@@ -167,7 +170,7 @@ begin
     select date_trunc('week', d.day::timestamp)::date as week_start,
       round(sum(coalesce(e.cost, 0)), 2) as cost,
       round(sum(p.quantity), 3) as output_quantity,
-      round(sum(coalesce(e.cost, 0)) / nullif(sum(p.quantity), 0) * unit_scale, 2) as cost_per_output
+      round(sum(coalesce(e.cost, 0)) / nullif(sum(p.quantity), 0) * v_unit_scale, 2) as cost_per_output
     from days d left join energy_by_day e using (day)
     left join production_daily p using (day)
     group by date_trunc('week', d.day::timestamp)::date
@@ -175,7 +178,7 @@ begin
   select jsonb_build_object(
     'period_start', p_start, 'period_end', p_end,
     'allocation_method', 'Even daily allocation across each recorded period; not metered daily consumption',
-    'output_unit', output_unit, 'output_unit_scale', unit_scale,
+    'output_unit', v_output_unit, 'output_unit_scale', v_unit_scale,
     'total_cost', coalesce((select round(sum(cost), 2) from energy_daily), 0),
     'total_co2_kg', (select case when count(*) = 0 then 0
       when bool_and(factor is not null) then round(sum(co2_kg), 3) end from energy_daily),
@@ -183,7 +186,7 @@ begin
     'entry_count', (select count(distinct entry_id) from energy_daily),
     'output_quantity', (select round(sum(quantity), 3) from production_daily),
     'cost_per_output', (select round(coalesce((select sum(cost) from energy_daily), 0)
-      / nullif(sum(quantity), 0) * unit_scale, 2) from production_daily),
+      / nullif(sum(quantity), 0) * v_unit_scale, 2) from production_daily),
     'by_source', coalesce((select jsonb_agg(to_jsonb(s) order by s.cost desc) from source_totals s), '[]'::jsonb),
     'weekly', coalesce((select jsonb_agg(to_jsonb(w) order by w.week_start) from weekly w), '[]'::jsonb)
   ) into result;
@@ -195,7 +198,8 @@ grant execute on function public.get_energy_period_report(uuid, date, date) to a
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('bill-uploads', 'bill-uploads', false, 10485760, array['image/jpeg', 'image/png', 'image/webp'])
-on conflict (id) do nothing;
+on conflict (id) do update set public = false,
+  file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
 -- Receipt object keys must be business UUID / random UUID.extension.
 create policy "Energy owners upload receipts" on storage.objects for insert to authenticated
