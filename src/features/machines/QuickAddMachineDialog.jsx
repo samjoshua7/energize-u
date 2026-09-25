@@ -110,44 +110,60 @@ export default function QuickAddMachineDialog({ open, onClose, businessId, secto
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.25, pb: 1 }}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      slotProps={{
+        paper: {
+          sx: {
+            bgcolor: 'var(--color-surface, #1C222A)',
+            border: '1px solid var(--color-line)',
+            borderRadius: '4px',
+            backgroundImage: 'none',
+            boxShadow: 'none',
+          },
+        },
+      }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 2, borderBottom: '1px solid var(--color-line)' }}>
         <Box
           sx={{
-            width: 36,
-            height: 36,
-            borderRadius: 1.5,
-            bgcolor: 'primary.main',
+            width: 32,
+            height: 32,
+            borderRadius: '4px',
+            bgcolor: 'var(--color-amber)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#FFFFFF',
+            color: '#14181D',
           }}
         >
           <MachineIcon fontSize="small" />
         </Box>
         <Box>
-          <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-            Add Machinery to Inventory
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            Add machinery to inventory
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>
             Register production machines & gensets to model fuel loads
           </Typography>
         </Box>
       </DialogTitle>
 
       <form onSubmit={handleSubmit}>
-        <DialogContent sx={{ pt: 1.5 }}>
+        <DialogContent sx={{ pt: 2.5 }}>
           {errorMsg && (
-            <Alert severity="error" sx={{ mb: 2, fontSize: '0.825rem' }}>
+            <Alert severity="error" sx={{ mb: 2, fontSize: '0.825rem', borderRadius: '4px' }}>
               {errorMsg}
             </Alert>
           )}
 
           {/* Quick Preset Suggestions */}
           <Box sx={{ mb: 2.5 }}>
-            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 1 }}>
-              Quick-add Common {sector.replace('_', ' ').toUpperCase()} Equipment:
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'var(--color-ink-muted)', display: 'block', mb: 1 }}>
+              Quick-add common equipment:
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
               {presets.map((p) => (
@@ -160,7 +176,10 @@ export default function QuickAddMachineDialog({ open, onClose, businessId, secto
                   sx={{
                     fontSize: '0.725rem',
                     cursor: 'pointer',
-                    '&:hover': { bgcolor: 'action.hover', borderColor: 'primary.main' },
+                    borderRadius: '4px',
+                    borderColor: 'var(--color-line)',
+                    color: 'var(--color-ink)',
+                    '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.04)', borderColor: 'var(--color-amber)' },
                   }}
                 />
               ))}
@@ -170,24 +189,26 @@ export default function QuickAddMachineDialog({ open, onClose, businessId, secto
           <Grid container spacing={2}>
             <Grid size={{ xs: 12 }}>
               <TextField
-                label="Machine / Equipment Name"
+                label="Machine / equipment name"
                 fullWidth
                 required
                 value={formData.name}
                 onChange={handleChange('name')}
                 placeholder="e.g. Heidelberg 4-Color Press or 62.5 kVA Genset"
                 size="small"
+                slotProps={{ input: { sx: { borderRadius: '4px' } } }}
               />
             </Grid>
 
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 select
-                label="Primary Fuel / Energy Source"
+                label="Primary fuel / energy source"
                 fullWidth
                 value={formData.primary_fuel}
                 onChange={handleChange('primary_fuel')}
                 size="small"
+                slotProps={{ select: { sx: { borderRadius: '4px' } } }}
               >
                 {Object.values(SOURCE_TYPES).map((st) => (
                   <MenuItem key={st} value={st}>
@@ -199,47 +220,63 @@ export default function QuickAddMachineDialog({ open, onClose, businessId, secto
 
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
-                label="Power Rating (kW or kVA)"
+                label="Power rating (kW or kVA)"
                 type="number"
                 fullWidth
                 value={formData.power_rating_kw}
                 onChange={handleChange('power_rating_kw')}
                 placeholder="e.g. 45"
                 size="small"
+                slotProps={{ input: { sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' } } }}
               />
             </Grid>
 
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
-                label="Machine Type"
+                label="Machine type"
                 fullWidth
                 value={formData.machine_type}
                 onChange={handleChange('machine_type')}
                 placeholder="e.g. genset, press, boiler, motor"
                 size="small"
+                slotProps={{ input: { sx: { borderRadius: '4px' } } }}
               />
             </Grid>
 
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
-                label="Equipment Age (Years)"
+                label="Equipment age (years)"
                 type="number"
                 fullWidth
                 value={formData.age_years}
                 onChange={handleChange('age_years')}
                 placeholder="e.g. 5"
                 size="small"
+                slotProps={{ input: { sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' } } }}
               />
             </Grid>
           </Grid>
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={onClose} color="inherit" disabled={loading} size="small">
+        <DialogActions sx={{ px: 3, pb: 2.5, borderTop: '1px solid var(--color-line)', pt: 2 }}>
+          <Button onClick={onClose} disabled={loading} size="small" sx={{ color: 'var(--color-ink-muted)', textTransform: 'none', borderRadius: '4px' }}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" color="primary" disabled={loading} size="small">
-            {loading ? <CircularProgress size={20} color="inherit" /> : 'Save Machine'}
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={loading}
+            size="small"
+            sx={{
+              bgcolor: 'var(--color-amber)',
+              color: '#14181D',
+              fontWeight: 700,
+              borderRadius: '4px',
+              textTransform: 'none',
+              '&:hover': { bgcolor: '#c47d25' },
+            }}
+          >
+            {loading ? <CircularProgress size={20} color="inherit" /> : 'Save machine'}
           </Button>
         </DialogActions>
       </form>

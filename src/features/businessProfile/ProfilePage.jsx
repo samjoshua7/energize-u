@@ -114,9 +114,9 @@ export default function ProfilePage() {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
           <Typography variant="h2" sx={{ fontWeight: 800 }}>
-            Facility & Machines
+            Facility & machines
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: 'var(--color-ink-muted)' }}>
             Manage your operating equipment and baseline profile
           </Typography>
         </Box>
@@ -131,139 +131,165 @@ export default function ProfilePage() {
         />
       )}
 
-      {/* Business Details Card */}
-      <Card>
-        <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h4" sx={{ fontWeight: 700 }}>
-              Facility Profile
-            </Typography>
-            <Chip
-              label={business?.sector?.toUpperCase() || 'MANUFACTURING'}
-              color="primary"
-              size="small"
-              variant="outlined"
-            />
-          </Box>
+      {/* Facility Profile Panel */}
+      <Box sx={{ bgcolor: 'var(--color-surface, #1C222A)', border: '1px solid var(--color-line)', borderRadius: '4px', p: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, pb: 1.5, borderBottom: '1px solid var(--color-line)' }}>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+            Facility profile
+          </Typography>
+          <Chip
+            label={business?.sector ? business.sector.charAt(0).toUpperCase() + business.sector.slice(1) : 'Manufacturing'}
+            size="small"
+            variant="outlined"
+            sx={{
+              borderRadius: '4px',
+              borderColor: 'var(--color-line)',
+              color: 'var(--color-amber)',
+              fontWeight: 600,
+              fontSize: '0.75rem',
+            }}
+          />
+        </Box>
 
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <Typography variant="caption" color="text.secondary">Facility Name</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>{business?.name || '—'}</Typography>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <Typography variant="caption" color="text.secondary">State / Location</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                {business?.location_state} {business?.location_city ? `(${business.location_city})` : ''}
-              </Typography>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <Typography variant="caption" color="text.secondary">Shift Pattern</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                {business?.shift_pattern?.replace('_', ' ') || 'Single Shift'}
-              </Typography>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <Typography variant="caption" color="text.secondary">Employee Count</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                {business?.employee_count ? `${business.employee_count} workers` : 'Not specified'}
-              </Typography>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <Typography variant="caption" color="text.secondary">Rooftop Solar</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600, color: business?.has_solar ? 'primary.main' : 'text.secondary' }}>
-                {business?.has_solar ? 'Installed' : 'None'}
-              </Typography>
-            </Grid>
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>Facility name</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>{business?.name || '—'}</Typography>
           </Grid>
-        </CardContent>
-      </Card>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>State / location</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>
+              {business?.location_state} {business?.location_city ? `(${business.location_city})` : ''}
+            </Typography>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>Shift pattern</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5, textTransform: 'capitalize' }}>
+              {business?.shift_pattern?.replace(/_/g, ' ') || 'Single shift'}
+            </Typography>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>Workforce size</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5, fontFamily: 'var(--font-mono)' }}>
+              {business?.employee_count ? `${business.employee_count} workers` : 'Not specified'}
+            </Typography>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>Rooftop solar</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5, color: business?.has_solar ? 'var(--color-sage)' : 'var(--color-ink-muted)' }}>
+              {business?.has_solar ? 'Installed' : 'None'}
+            </Typography>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>Primary output unit</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>
+              {business?.primary_output_unit || 'Units'}
+            </Typography>
+          </Grid>
+        </Grid>
+      </Box>
 
-      {/* Machines Inventory Card */}
-      <Card>
-        <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                Equipment & Genset Inventory
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Linking energy consumption to specific heavy machinery unlocks targeted tuning
-              </Typography>
-            </Box>
+      {/* Machines Inventory Panel */}
+      <Box sx={{ bgcolor: 'var(--color-surface, #1C222A)', border: '1px solid var(--color-line)', borderRadius: '4px', p: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, pb: 1.5, borderBottom: '1px solid var(--color-line)' }}>
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 700 }}>
+              Equipment & genset inventory
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>
+              Linking energy consumption to specific machinery unlocks targeted tuning
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => setOpenMachineModal(true)}
+            sx={{
+              bgcolor: 'var(--color-amber)',
+              color: '#14181D',
+              fontWeight: 700,
+              borderRadius: '4px',
+              textTransform: 'none',
+              '&:hover': { bgcolor: '#c47d25' },
+            }}
+          >
+            Add machine
+          </Button>
+        </Box>
+
+        {loadingMachines ? (
+          <Box sx={{ p: 4, textAlign: 'center' }}>
+            <CircularProgress size={28} sx={{ color: 'var(--color-amber)' }} />
+          </Box>
+        ) : machines.length === 0 ? (
+          <Box sx={{ p: 4, textAlign: 'center', border: '1px dashed var(--color-line)', borderRadius: '4px' }}>
+            <FactoryIcon sx={{ fontSize: 36, color: 'var(--color-ink-muted)', mb: 1, opacity: 0.5 }} />
+            <Typography variant="body2" sx={{ color: 'var(--color-ink-muted)' }}>
+              No machines or gensets added yet.
+            </Typography>
             <Button
-              variant="contained"
-              color="primary"
               size="small"
-              startIcon={<AddIcon />}
               onClick={() => setOpenMachineModal(true)}
+              sx={{ mt: 1, color: 'var(--color-amber)', textTransform: 'none', fontWeight: 600 }}
             >
-              Add Machine
+              + Register first machine (e.g. 50 kVA genset)
             </Button>
           </Box>
-
-          {loadingMachines ? (
-            <Box sx={{ p: 4, textAlign: 'center' }}>
-              <CircularProgress size={28} />
-            </Box>
-          ) : machines.length === 0 ? (
-            <Box sx={{ p: 3, textAlign: 'center', bgcolor: 'rgba(255,255,255,0.02)', borderRadius: 2 }}>
-              <FactoryIcon sx={{ fontSize: 40, color: 'text.secondary', mb: 1, opacity: 0.5 }} />
-              <Typography variant="body2" color="text.secondary">
-                No machines or gensets added yet.
-              </Typography>
-              <Button
-                size="small"
-                onClick={() => setOpenMachineModal(true)}
-                sx={{ mt: 1, color: 'primary.main' }}
-              >
-                + Register First Machine (e.g. 50 kVA Genset)
-              </Button>
-            </Box>
-          ) : (
-            <TableContainer component={Paper} sx={{ bgcolor: 'transparent', boxShadow: 'none' }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Machine Name</TableCell>
-                    <TableCell>Type</TableCell>
-                    <TableCell>Primary Fuel</TableCell>
-                    <TableCell align="right">Power (kW)</TableCell>
-                    <TableCell align="right">Age (Yrs)</TableCell>
-                    <TableCell align="center">Action</TableCell>
+        ) : (
+          <TableContainer component={Paper} sx={{ bgcolor: 'transparent', boxShadow: 'none' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ '& th': { borderColor: 'var(--color-line)', color: 'var(--color-ink-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' } }}>
+                  <TableCell>Machine name</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Primary fuel</TableCell>
+                  <TableCell align="right">Power (kW)</TableCell>
+                  <TableCell align="right">Age (yrs)</TableCell>
+                  <TableCell align="center">Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {machines.map((m) => (
+                  <TableRow key={m.machine_id} hover sx={{ '& td': { borderColor: 'var(--color-line)' } }}>
+                    <TableCell sx={{ fontWeight: 600, color: 'var(--color-ink)' }}>{m.name}</TableCell>
+                    <TableCell sx={{ color: 'var(--color-ink-muted)', textTransform: 'capitalize' }}>{m.machine_type || '—'}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={SOURCE_TYPE_LABELS[m.primary_fuel] || m.primary_fuel}
+                        size="small"
+                        variant="outlined"
+                        sx={{
+                          borderRadius: '4px',
+                          borderColor: 'var(--color-line)',
+                          color: 'var(--color-ink-muted)',
+                          fontSize: '0.75rem',
+                          textTransform: 'capitalize',
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)', color: 'var(--color-ink)' }}>
+                      {m.power_rating_kw ? `${m.power_rating_kw} kW` : '—'}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)', color: 'var(--color-ink-muted)' }}>
+                      {m.age_years ? `${m.age_years} yrs` : '—'}
+                    </TableCell>
+                    <TableCell align="center">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteMachine(m.machine_id)}
+                        sx={{ color: 'var(--color-rust)', '&:hover': { bgcolor: 'rgba(193, 85, 58, 0.1)' } }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
                   </TableRow>
-                </TableHead>
-                <TableBody>
-                  {machines.map((m) => (
-                    <TableRow key={m.machine_id} hover>
-                      <TableCell sx={{ fontWeight: 600 }}>{m.name}</TableCell>
-                      <TableCell>{m.machine_type || '—'}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={SOURCE_TYPE_LABELS[m.primary_fuel] || m.primary_fuel}
-                          size="small"
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell align="right">{m.power_rating_kw ? `${m.power_rating_kw} kW` : '—'}</TableCell>
-                      <TableCell align="right">{m.age_years ? `${m.age_years} yrs` : '—'}</TableCell>
-                      <TableCell align="center">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => handleDeleteMachine(m.machine_id)}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </Box>
 
       {/* Add Machine Dialog */}
       <Dialog
@@ -271,32 +297,47 @@ export default function ProfilePage() {
         onClose={() => setOpenMachineModal(false)}
         maxWidth="xs"
         fullWidth
-        slotProps={{ paper: { sx: { bgcolor: 'background.paper', borderRadius: 3 } } }}
+        slotProps={{
+          paper: {
+            sx: {
+              bgcolor: 'var(--color-surface, #1C222A)',
+              border: '1px solid var(--color-line)',
+              borderRadius: '4px',
+              backgroundImage: 'none',
+              boxShadow: 'none',
+            },
+          },
+        }}
       >
-        <DialogTitle sx={{ fontWeight: 700 }}>Add Machine or Generator</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, borderBottom: '1px solid var(--color-line)', pb: 2 }}>
+          Add machine or generator
+        </DialogTitle>
         <Box component="form" onSubmit={handleAddMachine}>
-          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2.5 }}>
             <TextField
-              label="Machine / Equipment Name"
+              label="Machine / equipment name"
               required
               fullWidth
               value={machineForm.name}
               onChange={(e) => setMachineForm({ ...machineForm, name: e.target.value })}
-              placeholder="e.g. Kirloskar 62.5 kVA Genset"
+              placeholder="e.g. Kirloskar 62.5 kVA genset"
+              slotProps={{ input: { sx: { borderRadius: '4px' } } }}
             />
             <TextField
-              label="Machine Type"
+              label="Machine type"
               fullWidth
               value={machineForm.machine_type}
               onChange={(e) => setMachineForm({ ...machineForm, machine_type: e.target.value })}
-              placeholder="e.g. Genset, Offset Press, Loom, Compressor"
+              placeholder="e.g. Genset, Offset press, Loom, Compressor"
+              slotProps={{ input: { sx: { borderRadius: '4px' } } }}
             />
             <TextField
               select
-              label="Primary Fuel Source"
+              label="Primary fuel source"
               fullWidth
               value={machineForm.primary_fuel}
               onChange={(e) => setMachineForm({ ...machineForm, primary_fuel: e.target.value })}
+              slotProps={{ select: { sx: { borderRadius: '4px' } } }}
             >
               {Object.keys(SOURCE_TYPES).map((k) => (
                 <MenuItem key={k} value={SOURCE_TYPES[k]}>
@@ -305,28 +346,44 @@ export default function ProfilePage() {
               ))}
             </TextField>
             <TextField
-              label="Power Rating (kW)"
+              label="Power rating (kW)"
               type="number"
               fullWidth
               value={machineForm.power_rating_kw}
               onChange={(e) => setMachineForm({ ...machineForm, power_rating_kw: e.target.value })}
               placeholder="e.g. 50"
+              slotProps={{ input: { sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' } } }}
             />
             <TextField
-              label="Age (Years)"
+              label="Age (years)"
               type="number"
               fullWidth
               value={machineForm.age_years}
               onChange={(e) => setMachineForm({ ...machineForm, age_years: e.target.value })}
               placeholder="e.g. 4.5"
+              slotProps={{ input: { sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' } } }}
             />
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2.5 }}>
-            <Button onClick={() => setOpenMachineModal(false)} color="inherit">
+          <DialogActions sx={{ px: 3, pb: 2.5, borderTop: '1px solid var(--color-line)', pt: 2 }}>
+            <Button
+              onClick={() => setOpenMachineModal(false)}
+              sx={{ color: 'var(--color-ink-muted)', textTransform: 'none', borderRadius: '4px' }}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="contained" color="primary">
-              Save Machine
+            <Button
+              type="submit"
+              variant="contained"
+              sx={{
+                bgcolor: 'var(--color-amber)',
+                color: '#14181D',
+                fontWeight: 700,
+                borderRadius: '4px',
+                textTransform: 'none',
+                '&:hover': { bgcolor: '#c47d25' },
+              }}
+            >
+              Save machine
             </Button>
           </DialogActions>
         </Box>

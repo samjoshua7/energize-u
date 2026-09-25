@@ -1,47 +1,42 @@
-import Grid from '@mui/material/Grid2'
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Typography,
-  Card,
-  CardContent,
   Button,
-  Chip,
   IconButton,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   CircularProgress,
-  Tabs,
-  Tab,
-  useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Divider,
 } from '@mui/material'
 import {
   Add as AddIcon,
   DocumentScannerOutlined as ScanIcon,
   DeleteOutline as DeleteIcon,
-  ReceiptLongOutlined as LedgerIcon,
   SpeedOutlined as OutputIcon,
+  LocalGasStationOutlined as FuelIcon,
+  Close as CloseIcon,
+  ReceiptOutlined as BillIcon,
+  VisibilityOutlined as ViewIcon,
 } from '@mui/icons-material'
 import { useAuth } from '../../hooks/useAuth'
-import { getEnergyEntries, deleteEnergyEntry } from '../energyEntries/api'
+import { getEnergyEntries, deleteEnergyEntry, getBillPhotoUrl } from '../energyEntries/api'
 import ManualEntryDialog from '../energyEntries/ManualEntryDialog'
 import BillUploadDialog from '../energyEntries/BillUploadDialog'
 import OutputRecordDialog from '../outputRecords/OutputRecordDialog'
 import StatusAlert from '../../components/feedback/StatusAlert'
-import { SOURCE_TYPE_LABELS, SOURCE_COLORS } from '../../lib/constants'
+import { SOURCE_TYPE_LABELS } from '../../lib/constants'
 
 export default function LedgerPage() {
-  const theme = useTheme()
-  const isDark = theme.palette.mode === 'dark'
   const { business } = useAuth()
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [sourceFilter, setSourceFilter] = useState('all')
+  const [viewTab, setViewTab] = useState('ledger') // 'ledger' or 'bills'
+  const [selectedPhoto, setSelectedPhoto] = useState(null)
+  const [fuelSource, setFuelSource] = useState('diesel')
 
   const [openManualModal, setOpenManualModal] = useState(false)
   const [openScanModal, setOpenScanModal] = useState(false)
@@ -55,7 +50,7 @@ export default function LedgerPage() {
       const data = await getEnergyEntries(business.business_id, {
         sourceType: sourceFilter !== 'all' ? sourceFilter : undefined,
       })
-      setEntries(data)
+      setEntries(data || [])
     } catch (err) {
       console.error('Failed to load ledger entries:', err)
       setAlert({ severity: 'error', message: 'Could not load ledger entries.' })
@@ -81,55 +76,96 @@ export default function LedgerPage() {
 
   const totalSpend = entries.reduce((sum, e) => sum + (parseFloat(e.cost_amount) || 0), 0)
   const totalEntries = entries.length
+  const gridEntries = entries.filter((e) => e.source_type === 'grid')
+
+  const handleViewBill = async (entry) => {
+    if (entry.bill_uploads?.storage_path) {
+      try {
+        const url = await getBillPhotoUrl(entry.bill_uploads.storage_path)
+        setSelectedPhoto({ url, entry })
+      } catch (err) {
+        setSelectedPhoto({ url: null, entry })
+      }
+    } else {
+      setSelectedPhoto({ url: null, entry })
+    }
+  }
+
+  const filterOptions = [
+    { value: 'all', label: 'All sources' },
+    { value: 'grid', label: 'Grid' },
+    { value: 'diesel', label: 'Diesel' },
+    { value: 'petrol', label: 'Petrol' },
+    { value: 'kerosene', label: 'Kerosene' },
+    { value: 'solar', label: 'Solar' },
+  ]
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, maxWidth: 960 }}>
       {/* Top Header */}
       <Box
         sx={{
           display: 'flex',
-          flexDirection: { xs: 'column', sm: 'row' },
+          flexWrap: 'wrap',
           justifyContent: 'space-between',
-          alignItems: { xs: 'flex-start', sm: 'center' },
+          alignItems: 'baseline',
+          pb: 1.5,
+          borderBottom: '1px solid var(--color-line)',
           gap: 1.5,
-          pb: 1,
-          borderBottom: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.06)' : '#E2E8F0'}`,
         }}
       >
         <Box>
-          <Typography variant="h3" sx={{ fontWeight: 700 }}>
-            Unified Energy Ledger
+          <Typography variant="h3" sx={{ fontWeight: 600, color: 'var(--color-ink)' }}>
+            Energy ledger
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>
             Multi-fuel ledger normalized across grid, diesel, petrol, kerosene, and solar
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             variant="outlined"
             size="small"
             startIcon={<OutputIcon sx={{ fontSize: 16 }} />}
             onClick={() => setOpenOutputModal(true)}
+            sx={{
+              borderColor: 'var(--color-line)',
+              color: 'var(--color-ink)',
+              '&:hover': { borderColor: 'var(--color-ink-muted)', bgcolor: 'var(--color-subtle-bg)' },
+            }}
           >
-            Log Output
+            Record output
           </Button>
           <Button
             variant="outlined"
             size="small"
-            startIcon={<AddIcon sx={{ fontSize: 16 }} />}
-            onClick={() => setOpenManualModal(true)}
+            startIcon={<FuelIcon sx={{ fontSize: 16 }} />}
+            onClick={() => {
+              setFuelSource('diesel')
+              setOpenManualModal(true)
+            }}
+            sx={{
+              borderColor: 'var(--color-line)',
+              color: 'var(--color-ink)',
+              '&:hover': { borderColor: 'var(--color-ink-muted)', bgcolor: 'var(--color-subtle-bg)' },
+            }}
           >
-            Log Fuel
+            Add fuel purchase
           </Button>
           <Button
             variant="contained"
-            color="primary"
             size="small"
             startIcon={<ScanIcon sx={{ fontSize: 16 }} />}
             onClick={() => setOpenScanModal(true)}
+            sx={{
+              bgcolor: 'var(--color-amber)',
+              color: '#FFFFFF',
+              fontWeight: 700,
+              '&:hover': { bgcolor: '#945814' },
+            }}
           >
-            Scan Bill
+            Upload bill
           </Button>
         </Box>
       </Box>
@@ -143,167 +179,382 @@ export default function LedgerPage() {
         />
       )}
 
-      {/* Summary Row */}
-      <Grid container spacing={1.5}>
-        <Grid size={{ xs: 6, sm: 4 }}>
-          <Card>
-            <CardContent sx={{ p: 1.75 }}>
-              <Typography variant="caption" color="text.secondary">Total Spend</Typography>
-              <Typography variant="h4" sx={{ fontWeight: 700, mt: 0.25 }}>
-                ₹{totalSpend.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 6, sm: 4 }}>
-          <Card>
-            <CardContent sx={{ p: 1.75 }}>
-              <Typography variant="caption" color="text.secondary">Logged Entries</Typography>
-              <Typography variant="h4" sx={{ fontWeight: 700, mt: 0.25 }}>
-                {totalEntries}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <Card>
-            <CardContent sx={{ p: 1.75 }}>
-              <Typography variant="caption" color="text.secondary">Sources Tracked</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600, mt: 0.25 }}>
-                Grid, Diesel, Petrol, Kerosene, Solar
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+      {/* Summary Figures in Plex Mono */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          py: 1.5,
+          borderBottom: '1px solid var(--color-line)',
+          gap: 2,
+        }}
+      >
+        <Box>
+          <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)', display: 'block' }}>
+            Total ledger spend
+          </Typography>
+          <Typography
+            sx={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: '1.5rem',
+              fontWeight: 600,
+              color: 'var(--color-ink)',
+            }}
+          >
+            ₹{totalSpend.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+          </Typography>
+        </Box>
 
-      {/* Fuel Filters */}
-      <Card sx={{ p: 0.5 }}>
-        <Tabs
-          value={sourceFilter}
-          onChange={(_, val) => setSourceFilter(val)}
-          variant="scrollable"
-          scrollButtons="auto"
-          textColor="primary"
-          indicatorColor="primary"
-          sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 0.5, fontSize: '0.8rem' } }}
-        >
-          <Tab value="all" label="All Sources" />
-          <Tab value="grid" label="Grid Electricity" />
-          <Tab value="diesel" label="Diesel Genset" />
-          <Tab value="petrol" label="Petrol" />
-          <Tab value="kerosene" label="Kerosene" />
-          <Tab value="solar" label="Solar" />
-        </Tabs>
-      </Card>
+        <Box>
+          <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)', display: 'block' }}>
+            Logged transactions
+          </Typography>
+          <Typography
+            sx={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: '1.5rem',
+              fontWeight: 600,
+              color: 'var(--color-ink)',
+            }}
+          >
+            {totalEntries}
+          </Typography>
+        </Box>
 
-      {/* Ledger Table */}
-      <Card>
-        <CardContent sx={{ p: 0 }}>
-          {loading ? (
-            <Box sx={{ p: 3, textAlign: 'center' }}>
-              <CircularProgress size={24} />
-            </Box>
-          ) : entries.length === 0 ? (
-            <Box sx={{ p: 3, textAlign: 'center' }}>
-              <LedgerIcon sx={{ fontSize: 36, color: 'text.secondary', opacity: 0.4, mb: 0.5 }} />
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                No entries in this view
+        {/* View Switcher: Ledger Rows vs Bill History */}
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            size="small"
+            variant={viewTab === 'ledger' ? 'contained' : 'outlined'}
+            onClick={() => setViewTab('ledger')}
+            sx={{
+              fontSize: '0.75rem',
+              ...(viewTab === 'ledger'
+                ? { bgcolor: 'var(--color-amber)', color: '#FFFFFF', '&:hover': { bgcolor: '#945814' } }
+                : { borderColor: 'var(--color-line)', color: 'var(--color-ink)' }),
+            }}
+          >
+            Ledger ({entries.length})
+          </Button>
+          <Button
+            size="small"
+            variant={viewTab === 'bills' ? 'contained' : 'outlined'}
+            onClick={() => setViewTab('bills')}
+            sx={{
+              fontSize: '0.75rem',
+              ...(viewTab === 'bills'
+                ? { bgcolor: 'var(--color-amber)', color: '#FFFFFF', '&:hover': { bgcolor: '#945814' } }
+                : { borderColor: 'var(--color-line)', color: 'var(--color-ink)' }),
+            }}
+          >
+            Electricity bills ({gridEntries.length})
+          </Button>
+        </Box>
+      </Box>
+
+      {viewTab === 'bills' ? (
+        /* Electricity Bill History */
+        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+          <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)', mb: 1.5 }}>
+            Historical electricity utility bills with confirmed OCR extraction parameters
+          </Typography>
+
+          {gridEntries.length === 0 ? (
+            <Box sx={{ p: 4, textAlign: 'center', border: '1px solid var(--color-line)', borderRadius: '4px' }}>
+              <Typography variant="body2" sx={{ color: 'var(--color-ink-muted)', mb: 1 }}>
+                No electricity bills recorded yet.
               </Typography>
-              <Box sx={{ mt: 1.5, display: 'flex', gap: 1, justifyContent: 'center' }}>
-                <Button size="small" variant="contained" color="primary" onClick={() => setOpenScanModal(true)}>
-                  Scan Bill
-                </Button>
-                <Button size="small" variant="outlined" onClick={() => setOpenManualModal(true)}>
-                  Log Fuel Manually
-                </Button>
-              </Box>
+              <Button size="small" variant="contained" onClick={() => setOpenScanModal(true)} sx={{ bgcolor: 'var(--color-amber)', color: '#FFFFFF' }}>
+                Upload first bill
+              </Button>
             </Box>
           ) : (
-            <TableContainer component={Paper} sx={{ bgcolor: 'transparent', boxShadow: 'none' }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Period</TableCell>
-                    <TableCell>Source</TableCell>
-                    <TableCell align="right">Quantity</TableCell>
-                    <TableCell align="right">Cost (INR)</TableCell>
-                    <TableCell>Type</TableCell>
-                    <TableCell>Machine / Notes</TableCell>
-                    <TableCell align="center">Action</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {entries.map((entry) => {
-                    const color = SOURCE_COLORS[entry.source_type] || '#10B981'
-                    return (
-                      <TableRow key={entry.entry_id} hover>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {entry.period_start}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            to {entry.period_end}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={SOURCE_TYPE_LABELS[entry.source_type] || entry.source_type}
-                            size="small"
-                            sx={{
-                              bgcolor: `${color}15`,
-                              color: color,
-                              fontWeight: 600,
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>
-                          {entry.quantity} {entry.quantity_unit}
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 700 }}>
-                          ₹{parseFloat(entry.cost_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={entry.entry_source === 'ocr' ? 'OCR' : 'Manual'}
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontSize: '0.675rem' }}
-                          />
-                        </TableCell>
-                        <TableCell sx={{ maxWidth: 180 }}>
-                          {entry.machines?.name && (
-                            <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: 'primary.main' }}>
-                              {entry.machines.name}
-                            </Typography>
-                          )}
-                          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-                            {entry.notes || '—'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="center">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleDelete(entry.entry_id)}
-                          >
-                            <DeleteIcon sx={{ fontSize: 16 }} />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            gridEntries.map((entry) => (
+              <Box
+                key={entry.entry_id}
+                sx={{
+                  py: 1.5,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderBottom: '1px solid var(--color-line)',
+                  gap: 1.5,
+                }}
+              >
+                <Box sx={{ minWidth: 160 }}>
+                  <Typography
+                    sx={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      color: 'var(--color-ink)',
+                    }}
+                  >
+                    {entry.period_start} to {entry.period_end}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>
+                    {entry.entry_source === 'ocr' ? 'Groq Vision OCR' : 'Manual entry'}
+                  </Typography>
+                </Box>
+
+                <Box sx={{ minWidth: 120 }}>
+                  <Typography
+                    sx={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '0.875rem',
+                      color: 'var(--color-ink)',
+                    }}
+                  >
+                    {entry.quantity} kWh
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>
+                    Load: {entry.kva_load ? `${entry.kva_load} kVA` : '—'}
+                  </Typography>
+                </Box>
+
+                <Box sx={{ minWidth: 120 }}>
+                  <Typography
+                    sx={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '0.9375rem',
+                      fontWeight: 600,
+                      color: 'var(--color-amber)',
+                    }}
+                  >
+                    ₹{parseFloat(entry.cost_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>
+                    {entry.tariff_category || 'Industrial tariff'}
+                  </Typography>
+                </Box>
+
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<ViewIcon sx={{ fontSize: 14 }} />}
+                  onClick={() => handleViewBill(entry)}
+                  sx={{ fontSize: '0.75rem', borderColor: 'var(--color-line)', color: 'var(--color-ink)' }}
+                >
+                  View bill
+                </Button>
+              </Box>
+            ))
           )}
-        </CardContent>
-      </Card>
+        </Box>
+      ) : (
+        /* Standard Ledger Rows per DESIGN.md */
+        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+          {/* Source Filter Strip */}
+          <Box sx={{ display: 'flex', gap: 1.5, pb: 1.5, borderBottom: '1px solid var(--color-line)', flexWrap: 'wrap' }}>
+            {filterOptions.map((opt) => (
+              <Typography
+                key={opt.value}
+                onClick={() => setSourceFilter(opt.value)}
+                sx={{
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  fontWeight: sourceFilter === opt.value ? 600 : 400,
+                  color: sourceFilter === opt.value ? 'var(--color-amber)' : 'var(--color-ink-muted)',
+                  borderBottom: sourceFilter === opt.value ? '2px solid var(--color-amber)' : 'none',
+                  pb: 0.25,
+                }}
+              >
+                {opt.label}
+              </Typography>
+            ))}
+          </Box>
+
+          {loading ? (
+            <Box sx={{ p: 4, textAlign: 'center' }}>
+              <CircularProgress size={20} sx={{ color: 'var(--color-amber)' }} />
+            </Box>
+          ) : entries.length === 0 ? (
+            <Box sx={{ p: 4, textAlign: 'center', borderBottom: '1px solid var(--color-line)' }}>
+              <Typography variant="body2" sx={{ color: 'var(--color-ink-muted)' }}>
+                No entries found in this ledger view.
+              </Typography>
+            </Box>
+          ) : (
+            /* The Ledger Row Pattern from DESIGN.md */
+            entries.map((entry) => {
+              const isGrid = entry.source_type === 'grid'
+              const isDiesel = entry.source_type === 'diesel'
+              const isSolar = entry.source_type === 'solar'
+
+              return (
+                <Box
+                  key={entry.entry_id}
+                  sx={{
+                    py: 1.25,
+                    px: 0.5,
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    borderBottom: '1px solid var(--color-line)',
+                    gap: 1.5,
+                    '&:hover': {
+                      bgcolor: 'var(--color-subtle-bg)',
+                    },
+                  }}
+                >
+                  {/* Date Column */}
+                  <Typography
+                    sx={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '0.8125rem',
+                      color: 'var(--color-ink-muted)',
+                      width: { xs: '100%', sm: 100 },
+                    }}
+                  >
+                    {entry.period_start}
+                  </Typography>
+
+                  {/* Fuel / Source Description */}
+                  <Box sx={{ flex: 1, minWidth: 160 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'var(--color-ink)' }}>
+                      {SOURCE_TYPE_LABELS[entry.source_type] || entry.source_type}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>
+                      {entry.machines?.name || (isGrid ? 'Discom mains' : entry.notes || 'Stationary')}
+                    </Typography>
+                  </Box>
+
+                  {/* Quantity in Plex Mono */}
+                  <Typography
+                    sx={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '0.8125rem',
+                      color: isSolar ? 'var(--color-sage)' : 'var(--color-ink)',
+                      width: 100,
+                      textAlign: 'right',
+                    }}
+                  >
+                    {entry.quantity} {entry.quantity_unit}
+                  </Typography>
+
+                  {/* Cost in Plex Mono */}
+                  <Typography
+                    sx={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      color: isDiesel ? 'var(--color-rust)' : 'var(--color-ink)',
+                      width: 110,
+                      textAlign: 'right',
+                    }}
+                  >
+                    ₹{parseFloat(entry.cost_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </Typography>
+
+                  {/* Delete Action */}
+                  <IconButton
+                    size="small"
+                    onClick={() => handleDelete(entry.entry_id)}
+                    sx={{ color: 'var(--color-ink-muted)', '&:hover': { color: 'var(--color-rust)' } }}
+                  >
+                    <DeleteIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                </Box>
+              )
+            })
+          )}
+        </Box>
+      )}
+
+      {/* Bill Document View Panel */}
+      <Dialog
+        open={Boolean(selectedPhoto)}
+        onClose={() => setSelectedPhoto(null)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: 'var(--color-surface)',
+            border: '1px solid var(--color-line)',
+            borderRadius: '4px',
+            boxShadow: 'none',
+          },
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+          <Typography variant="h5" sx={{ fontWeight: 600, color: 'var(--color-ink)' }}>
+            Electricity utility bill audit
+          </Typography>
+          <IconButton size="small" onClick={() => setSelectedPhoto(null)} sx={{ color: 'var(--color-ink-muted)' }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ borderColor: 'var(--color-line)' }}>
+          {selectedPhoto && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {selectedPhoto.url && (
+                <Box
+                  component="img"
+                  src={selectedPhoto.url}
+                  alt="Electricity Bill"
+                  sx={{
+                    width: '100%',
+                    maxHeight: 400,
+                    objectFit: 'contain',
+                    bgcolor: 'var(--color-bg)',
+                    borderRadius: '2px',
+                    border: '1px solid var(--color-line)',
+                  }}
+                />
+              )}
+
+              {/* Parsed Fields (Show your work panel) */}
+              <Box sx={{ p: 2, bgcolor: 'var(--color-bg)', border: '1px solid var(--color-line)', borderRadius: '4px' }}>
+                <Typography variant="caption" sx={{ color: 'var(--color-amber)', fontWeight: 600, display: 'block', mb: 1 }}>
+                  Audited bill parameters
+                </Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+                  <Box>
+                    <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>Billing period</Typography>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.8125rem', color: 'var(--color-ink)' }}>
+                      {selectedPhoto.entry?.period_start} to {selectedPhoto.entry?.period_end}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>Units consumed</Typography>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.8125rem', color: 'var(--color-ink)' }}>
+                      {selectedPhoto.entry?.quantity} kWh
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>Sanctioned load</Typography>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.8125rem', color: 'var(--color-ink)' }}>
+                      {selectedPhoto.entry?.kva_load ? `${selectedPhoto.entry.kva_load} kVA` : '45 kVA'}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>Total bill amount</Typography>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-amber)' }}>
+                      ₹{parseFloat(selectedPhoto.entry?.cost_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setSelectedPhoto(null)} sx={{ color: 'var(--color-ink)' }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Modals */}
       <ManualEntryDialog
         open={openManualModal}
         onClose={() => setOpenManualModal(false)}
         businessId={business?.business_id}
+        initialSource={fuelSource}
         onSuccess={() => {
           setAlert({ severity: 'success', message: 'Fuel entry saved.' })
           loadEntries()
@@ -318,14 +569,13 @@ export default function LedgerPage() {
           setAlert({ severity: 'success', message: 'Bill scanned and logged.' })
           loadEntries()
         }}
-        onFallbackToManual={() => setOpenManualModal(true)}
       />
 
       <OutputRecordDialog
         open={openOutputModal}
         onClose={() => setOpenOutputModal(false)}
         businessId={business?.business_id}
-        defaultUnit="sheets"
+        defaultUnit={business?.primary_output_unit || 'units'}
         onSuccess={() => {
           setAlert({ severity: 'success', message: 'Output record saved.' })
         }}

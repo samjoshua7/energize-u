@@ -13,10 +13,18 @@ import UploadPage from '../features/energyEntries/UploadPage'
 import RecommendationsPage from '../features/recommendations/RecommendationsPage'
 import ProfilePage from '../features/businessProfile/ProfilePage'
 import SimulatorPage from '../features/simulator/SimulatorPage'
+import BenchmarkPage from '../features/benchmarks/BenchmarkPage'
+import EmissionsPage from '../features/emissions/EmissionsPage'
+import LiveDashboardPage from '../features/liveDemo/LiveDashboardPage'
+import LiveSimulatorPage from '../features/liveDemo/LiveSimulatorPage'
 
 export default function AppRoutes() {
   return (
     <Routes>
+      {/* ── Live Demo Routes (no auth, for hackathon two-device demo) ── */}
+      <Route path="/live" element={<LiveDashboardPage />} />
+      <Route path="/live/simulator" element={<LiveSimulatorPage />} />
+
       {/* Public Auth Routes */}
       <Route
         path="/login"
@@ -42,10 +50,12 @@ export default function AppRoutes() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="ledger" element={<LedgerPage />} />
-        <Route path="upload" element={<UploadPage />} />
+        <Route path="benchmarks" element={<BenchmarkPage />} />
+        <Route path="emissions" element={<EmissionsPage />} />
         <Route path="recommendations" element={<RecommendationsPage />} />
-        <Route path="profile" element={<ProfilePage />} />
         <Route path="simulator" element={<SimulatorPage />} />
+        <Route path="profile" element={<ProfilePage />} />
+        <Route path="upload" element={<UploadPage />} />
       </Route>
 
       {/* Catch-all */}

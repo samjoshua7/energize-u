@@ -1,600 +1,367 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState } from 'react'
 import {
   Box,
-  Card,
   Typography,
-  Slider,
-  TextField,
-  MenuItem,
   Button,
   Chip,
-  CircularProgress,
+  Tabs,
+  Tab,
+  IconButton,
+  Tooltip,
   Alert,
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
 } from '@mui/material'
 import Grid from '@mui/material/Grid2'
 import {
-  TuneOutlined as SimulatorIcon,
-  PlayArrowRounded as RunIcon,
-  CheckCircleOutlineRounded as SuccessIcon,
-  Co2Outlined as CarbonIcon,
-  SavingsOutlined as SavingsIcon,
-  ArrowForwardRounded as ArrowIcon,
+  PlayArrow as PlayIcon,
+  Pause as PauseIcon,
+  FastForward as FastForwardIcon,
+  FlashOff as OutageIcon,
+  FlashOn as RestoreIcon,
+  CloudSync as SyncIcon,
+  CheckCircle as SuccessIcon,
+  Speed as SpeedIcon,
+  Tune as PresetIcon,
+  Hub as HubIcon,
+  Inventory2 as InventoryIcon,
+  ShowChart as ChartIcon,
+  BarChart as RankingIcon,
+  NotificationsActive as AlertsIcon,
+  AutoAwesome as WizardIcon,
 } from '@mui/icons-material'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import {
-  calculateSimulationMetrics,
-  executeSimulationAndPopulate,
-  SECTOR_BENCHMARKS,
-} from './simulatorEngine'
-import { SECTORS, SHIFT_PATTERNS, INDIAN_STATES } from '../../lib/constants'
-
-const SCENARIO_PRESETS = [
-  {
-    id: 'printing_standard',
-    label: 'Standard Printing Press (Pune MIDC)',
-    sector: 'printing',
-    monthlyOutput: 55000,
-    gridTariff: 9.50,
-    outagePercent: 12,
-    dieselPrice: 94.0,
-    solarKw: 0,
-    shiftPattern: 'double_shift',
-    locationState: 'Maharashtra',
-  },
-  {
-    id: 'textile_high_outage',
-    label: 'High-Outage Textile Mill (Surat)',
-    sector: 'textile',
-    monthlyOutput: 15000,
-    gridTariff: 8.40,
-    outagePercent: 28,
-    dieselPrice: 95.0,
-    solarKw: 0,
-    shiftPattern: 'double_shift',
-    locationState: 'Gujarat',
-  },
-  {
-    id: 'metal_cnc_shop',
-    label: 'Precision CNC Machining Shop (Rajkot)',
-    sector: 'metal_fabrication',
-    monthlyOutput: 4500,
-    gridTariff: 9.80,
-    outagePercent: 8,
-    dieselPrice: 94.5,
-    solarKw: 15,
-    shiftPattern: 'single_shift',
-    locationState: 'Gujarat',
-  },
-  {
-    id: 'green_solar_plant',
-    label: 'Solar-Powered Agro Processing Unit',
-    sector: 'food_processing',
-    monthlyOutput: 25000,
-    gridTariff: 9.20,
-    outagePercent: 5,
-    dieselPrice: 94.0,
-    solarKw: 40,
-    shiftPattern: 'double_shift',
-    locationState: 'Karnataka',
-  },
-]
+import { useSimulation } from './SimulationContext'
+import FactoryEnergyFlowMap from './components/FactoryEnergyFlowMap'
+import LiveMachineCardsHub from './components/LiveMachineCardsHub'
+import ResourceInventoryView from './components/ResourceInventoryView'
+import ConsumptionOverTimeChart from './components/ConsumptionOverTimeChart'
+import CostPerMachineRanking from './components/CostPerMachineRanking'
+import EfficiencyAlertsFeed from './components/EfficiencyAlertsFeed'
+import { SECTORS, INDIAN_STATES } from '../../lib/constants'
 
 export default function SimulatorPage() {
-  const navigate = useNavigate()
   const { business, refreshBusiness } = useAuth()
+  const {
+    simState,
+    togglePlay,
+    setSpeed,
+    stepManual,
+    fastForwardDay,
+    toggleGridOutage,
+    toggleMachine,
+    toggleAnomaly,
+    refuel,
+    resolveAlert,
+    syncToDatabase,
+    syncing,
+    syncSuccess,
+  } = useSimulation()
 
-  // Simulator Inputs
-  const [sector, setSector] = useState(business?.sector || 'printing')
-  const [businessName, setBusinessName] = useState(business?.name || 'Apex Packaging & Offset Printers')
-  const [locationState, setLocationState] = useState(business?.location_state || 'Maharashtra')
-  const [shiftPattern, setShiftPattern] = useState(business?.shift_pattern || 'double_shift')
-  const [monthlyOutput, setMonthlyOutput] = useState(55000)
-  const [gridTariff, setGridTariff] = useState(9.20)
-  const [outagePercent, setOutagePercent] = useState(15)
-  const [dieselPrice, setDieselPrice] = useState(94.0)
-  const [solarKw, setSolarKw] = useState(0)
-  const [monthCount, setMonthCount] = useState(3)
+  const [activeTab, setActiveTab] = useState(0)
+  const [openPresetDialog, setOpenPresetDialog] = useState(false)
+  const [syncNotice, setSyncNotice] = useState(false)
 
-  const [loading, setLoading] = useState(false)
-  const [simulationResult, setSimulationResult] = useState(null)
-  const [errorMsg, setErrorMsg] = useState('')
-
-  // Calculate live preview metrics in real time as sliders move
-  const liveMetrics = useMemo(() => {
-    return calculateSimulationMetrics({
-      sector,
-      monthlyOutput: Number(monthlyOutput) || 1000,
-      gridTariff: Number(gridTariff) || 9,
-      outagePercent: Number(outagePercent) || 0,
-      dieselPrice: Number(dieselPrice) || 94,
-      solarKw: Number(solarKw) || 0,
-    })
-  }, [sector, monthlyOutput, gridTariff, outagePercent, dieselPrice, solarKw])
-
-  const handleApplyPreset = (preset) => {
-    setSector(preset.sector)
-    setMonthlyOutput(preset.monthlyOutput)
-    setGridTariff(preset.gridTariff)
-    setOutagePercent(preset.outagePercent)
-    setDieselPrice(preset.dieselPrice)
-    setSolarKw(preset.solarKw)
-    setShiftPattern(preset.shiftPattern)
-    setLocationState(preset.locationState)
-    setSimulationResult(null)
-  }
-
-  const handleRunSimulation = async () => {
-    if (!business?.business_id) {
-      setErrorMsg('No active business found. Please ensure you are logged in.')
-      return
-    }
-
-    try {
-      setLoading(true)
-      setErrorMsg('')
-      setSimulationResult(null)
-
-      const result = await executeSimulationAndPopulate({
-        businessId: business.business_id,
-        businessName: businessName.trim(),
-        sector,
-        locationState,
-        shiftPattern,
-        monthlyOutput: Number(monthlyOutput),
-        gridTariff: Number(gridTariff),
-        outagePercent: Number(outagePercent),
-        dieselPrice: Number(dieselPrice),
-        solarKw: Number(solarKw),
-        monthCount: Number(monthCount),
-      })
-
-      await refreshBusiness()
-      setSimulationResult(result)
-    } catch (err) {
-      console.error('Simulation execution failed:', err)
-      setErrorMsg(err.message || 'Simulation execution encountered an error.')
-    } finally {
-      setLoading(false)
+  const handleSync = async () => {
+    if (!business?.business_id) return
+    const ok = await syncToDatabase(business.business_id)
+    if (ok) {
+      setSyncNotice(true)
+      if (refreshBusiness) await refreshBusiness()
     }
   }
-
-  const isAboveBenchmark = liveMetrics.costDeltaPercent > 0
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, width: '100%', minWidth: 0 }}>
-      {/* Header */}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pb: 6 }}>
+      {/* Top Header & Context Description */}
       <Box
         sx={{
           display: 'flex',
-          flexDirection: { xs: 'column', sm: 'row' },
+          flexDirection: { xs: 'column', md: 'row' },
           justifyContent: 'space-between',
-          alignItems: { xs: 'flex-start', sm: 'center' },
+          alignItems: { xs: 'flex-start', md: 'center' },
           gap: 1.5,
-          pb: 1.5,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
+          pb: 2,
+          borderBottom: '1px solid var(--color-line)',
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
-          <Box
-            sx={{
-              width: 44,
-              flexShrink: 0,
-              height: 44,
-              borderRadius: 2,
-              bgcolor: 'primary.main',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#FFFFFF',
-            }}
-          >
-            <SimulatorIcon sx={{ fontSize: 26 }} />
-          </Box>
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
-              Energy Scenario Simulator
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: 'var(--color-ink)' }}>
+              Industrial Energy & Machinery Simulation Engine
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Tune operational variables to simulate energy costs, outages, and solar offsets
-            </Typography>
+            <Chip
+              label="LIVE DEMO HUB"
+              size="small"
+              sx={{
+                bgcolor: 'rgba(158, 93, 18, 0.12)',
+                color: 'var(--color-amber)',
+                fontWeight: 700,
+                fontSize: '0.68rem',
+                border: '1px solid rgba(158, 93, 18, 0.3)',
+                fontFamily: 'var(--font-mono)',
+              }}
+            />
           </Box>
+          <Typography variant="body2" sx={{ color: 'var(--color-ink-muted)', mt: 0.5 }}>
+            Dynamic digital twin simulating Indian MSME shop-floor machinery, real-time grid vs genset fuel drawing, and anomaly diagnostics.
+          </Typography>
         </Box>
 
+        {/* Sync to Database Button */}
         <Button
-          variant="outlined"
+          variant="contained"
           size="small"
-          onClick={() => navigate('/')}
-          startIcon={<ArrowIcon sx={{ transform: 'rotate(180deg)' }} />}
-          sx={{ fontWeight: 600, flexShrink: 0 }}
+          startIcon={syncing ? <CircularProgress size={16} sx={{ color: '#FFFFFF' }} /> : <SyncIcon sx={{ fontSize: 18 }} />}
+          onClick={handleSync}
+          disabled={syncing || !business?.business_id}
+          sx={{
+            bgcolor: 'var(--color-amber)',
+            color: '#FFFFFF',
+            fontWeight: 700,
+            textTransform: 'none',
+            fontSize: '0.8125rem',
+            py: 0.8,
+            px: 2,
+            boxShadow: 'none',
+            '&:hover': { bgcolor: '#7E470B' },
+          }}
         >
-          Back to Dashboard
+          {syncing ? 'Syncing to Supabase…' : 'Sync to Live App Ledger'}
         </Button>
       </Box>
 
-      {/* Scenario Presets Quick-Picks */}
-      <Card variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: 'divider' }}>
-        <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 1 }}>
-          ⚡ 1-Click Operational Presets:
-        </Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          {SCENARIO_PRESETS.map((preset) => (
-            <Chip
-              key={preset.id}
-              label={preset.label}
-              variant="outlined"
-              onClick={() => handleApplyPreset(preset)}
+      {/* Sync Success Alert */}
+      {syncNotice && (
+        <Alert
+          severity="success"
+          onClose={() => setSyncNotice(false)}
+          sx={{
+            borderRadius: '4px',
+            bgcolor: 'rgba(30, 107, 57, 0.08)',
+            border: '1px solid rgba(30, 107, 57, 0.3)',
+            color: 'var(--color-ink)',
+            '& .MuiAlert-icon': { color: 'var(--color-sage)' },
+          }}
+        >
+          <strong>Simulation successfully synced!</strong> Supabase database populated with simulated machines, multi-fuel energy entries, production records, and AI recommendations. Overview, Ledger, Benchmarks, and Emissions are now live.
+        </Alert>
+      )}
+
+      {/* Interactive Simulation Control Bar */}
+      <Box
+        sx={{
+          p: 1.75,
+          bgcolor: 'var(--color-surface)',
+          border: '1px solid var(--color-line)',
+          borderRadius: '4px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 2,
+        }}
+      >
+        {/* Left: Clock & Status */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box
               sx={{
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '0.8rem',
-                maxWidth: '100%',
-                height: 'auto',
-                minHeight: 40,
-                '& .MuiChip-label': { whiteSpace: 'normal', py: 1 },
-                borderColor: sector === preset.sector ? 'primary.main' : 'divider',
-                bgcolor: sector === preset.sector ? 'action.selected' : 'background.paper',
-                '&:hover': { borderColor: 'primary.main' },
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                bgcolor: simState.isRunning ? 'var(--color-sage)' : 'var(--color-ink-muted)',
+                boxShadow: simState.isRunning ? '0 0 8px var(--color-sage)' : 'none',
               }}
             />
-          ))}
-        </Box>
-      </Card>
-
-      {/* Main Two-Column Layout */}
-      <Grid container spacing={2.5} sx={{ '& .MuiGrid2-root': { minWidth: 0 } }}>
-        {/* Left Column: Customization Sliders & Controls */}
-        <Grid size={{ xs: 12, md: 7 }}>
-          <Card variant="outlined" sx={{ p: { xs: 2, sm: 2.75 }, borderRadius: 2.5, borderColor: 'divider' }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
-              1. Operational Parameters & Fuel Mix
+            <Typography variant="body2" sx={{ fontWeight: 700, color: 'var(--color-ink)' }}>
+              {simState.isRunning ? 'SIMULATION ACTIVE' : 'PAUSED'}
             </Typography>
+          </Box>
 
-            <Grid container spacing={2.5} sx={{ '& .MuiSlider-root': { width: 'calc(100% - 16px)', mx: 1 } }}>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  select
-                  label="Industrial Sector"
-                  fullWidth
-                  size="small"
-                  value={sector}
-                  onChange={(e) => {
-                    const nextSector = e.target.value
-                    setSector(nextSector)
-                    setMonthlyOutput(SECTOR_BENCHMARKS[nextSector]?.defaultOutput || 50000)
-                  }}
-                  helperText="Sets BEE benchmark baseline"
-                >
-                  {SECTORS.map((s) => (
-                    <MenuItem key={s.value} value={s.value}>
-                      {s.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
+          <Box sx={{ borderLeft: '1px solid var(--color-line)', pl: 2 }}>
+            <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)', display: 'block', fontSize: '0.68rem' }}>
+              Simulated Factory Time
+            </Typography>
+            <Typography sx={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '1.15rem', color: 'var(--color-amber)', lineHeight: 1.1 }}>
+              {simState.formattedTime} <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-ink-muted)' }}>IST</span>
+            </Typography>
+          </Box>
+        </Box>
 
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  select
-                  label="DISCOM State"
-                  fullWidth
-                  size="small"
-                  value={locationState}
-                  onChange={(e) => setLocationState(e.target.value)}
-                >
-                  {INDIAN_STATES.map((state) => (
-                    <MenuItem key={state} value={state}>
-                      {state}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
+        {/* Center: Controls (Play/Pause, Speed, Step) */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Tooltip title={simState.isRunning ? 'Pause simulation' : 'Resume simulation'}>
+            <IconButton
+              size="small"
+              onClick={togglePlay}
+              sx={{
+                bgcolor: simState.isRunning ? 'var(--color-subtle-bg)' : 'var(--color-amber)',
+                color: simState.isRunning ? 'var(--color-ink)' : '#FFFFFF',
+                border: '1px solid var(--color-line)',
+                borderRadius: '4px',
+                p: 0.75,
+                '&:hover': { bgcolor: 'var(--color-amber)', color: '#FFFFFF' },
+              }}
+            >
+              {simState.isRunning ? <PauseIcon sx={{ fontSize: 18 }} /> : <PlayIcon sx={{ fontSize: 18 }} />}
+            </IconButton>
+          </Tooltip>
 
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  select
-                  label="Shift Pattern"
-                  fullWidth
-                  size="small"
-                  value={shiftPattern}
-                  onChange={(e) => setShiftPattern(e.target.value)}
-                >
-                  {SHIFT_PATTERNS.map((p) => (
-                    <MenuItem key={p.value} value={p.value}>
-                      {p.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  select
-                  label="Historical Timeline"
-                  fullWidth
-                  size="small"
-                  value={monthCount}
-                  onChange={(e) => setMonthCount(Number(e.target.value))}
-                >
-                  <MenuItem value={1}>1 Month (Current Period)</MenuItem>
-                  <MenuItem value={3}>3 Months (Quarterly Trend)</MenuItem>
-                  <MenuItem value={6}>6 Months (Half-Yearly History)</MenuItem>
-                </TextField>
-              </Grid>
-
-              {/* Monthly Production Output Slider */}
-              <Grid size={{ xs: 12 }}>
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 1 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    Monthly Production Target ({liveMetrics.benchmark.unit})
-                  </Typography>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'primary.main' }}>
-                    {Number(monthlyOutput).toLocaleString('en-IN')} {liveMetrics.benchmark.unit}
-                  </Typography>
-                </Box>
-                <Slider
-                  aria-label="Monthly production target"
-                  valueLabelDisplay="auto"
-                  value={Number(monthlyOutput)}
-                  min={1000}
-                  max={sector === 'metal_fabrication' ? 20000 : 150000}
-                  step={sector === 'metal_fabrication' ? 250 : 2500}
-                  onChange={(_, val) => setMonthlyOutput(val)}
-                  color="primary"
-                />
-              </Grid>
-
-              {/* Grid Tariff Slider */}
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 1 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    Grid Electricity Tariff
-                  </Typography>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                    ₹{Number(gridTariff).toFixed(2)}/kWh
-                  </Typography>
-                </Box>
-                <Slider
-                  aria-label="Grid electricity tariff"
-                  valueLabelDisplay="auto"
-                  value={Number(gridTariff)}
-                  min={7.0}
-                  max={13.0}
-                  step={0.1}
-                  onChange={(_, val) => setGridTariff(val)}
-                  color="primary"
-                />
-              </Grid>
-
-              {/* Diesel Outage Dependency Slider */}
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 1 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    Grid Outage / Genset Share
-                  </Typography>
-                  <Typography
-                    variant="subtitle2"
-                    sx={{
-                      fontWeight: 800,
-                      color: outagePercent > 15 ? 'warning.main' : 'text.primary',
-                    }}
-                  >
-                    {outagePercent}% of runtime
-                  </Typography>
-                </Box>
-                <Slider
-                  aria-label="Grid outage or genset share"
-                  valueLabelDisplay="auto"
-                  value={Number(outagePercent)}
-                  min={0}
-                  max={45}
-                  step={1}
-                  onChange={(_, val) => setOutagePercent(val)}
-                  color={outagePercent > 15 ? 'warning' : 'primary'}
-                />
-              </Grid>
-
-              {/* Diesel Fuel Price Slider */}
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 1 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    Diesel Fuel Price
-                  </Typography>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                    ₹{Number(dieselPrice).toFixed(1)}/L
-                  </Typography>
-                </Box>
-                <Slider
-                  aria-label="Diesel fuel price"
-                  valueLabelDisplay="auto"
-                  value={Number(dieselPrice)}
-                  min={85.0}
-                  max={110.0}
-                  step={0.5}
-                  onChange={(_, val) => setDieselPrice(val)}
-                  color="primary"
-                />
-              </Grid>
-
-              {/* Rooftop Solar Capacity Slider */}
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 1 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    Rooftop Solar Installed
-                  </Typography>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: solarKw > 0 ? '#10B981' : 'text.secondary' }}>
-                    {solarKw > 0 ? `${solarKw} kW Plant` : 'None (0 kW)'}
-                  </Typography>
-                </Box>
-                <Slider
-                  aria-label="Rooftop solar capacity"
-                  valueLabelDisplay="auto"
-                  value={Number(solarKw)}
-                  min={0}
-                  max={80}
-                  step={5}
-                  onChange={(_, val) => setSolarKw(val)}
-                  sx={{ color: '#10B981' }}
-                />
-              </Grid>
-            </Grid>
-
-            {/* Run Action Button */}
-            <Box sx={{ mt: 3.5, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+          {/* Speed Selector Buttons */}
+          <Box sx={{ display: 'flex', border: '1px solid var(--color-line)', borderRadius: '4px', overflow: 'hidden' }}>
+            {[
+              { label: '1x', val: 1 },
+              { label: '5x', val: 5 },
+              { label: '30x', val: 30 },
+            ].map((spd) => (
               <Button
-                variant="contained"
-                color="primary"
-                fullWidth
-                size="large"
-                disabled={loading}
-                onClick={handleRunSimulation}
-                startIcon={loading ? <CircularProgress size={22} color="inherit" /> : <RunIcon sx={{ fontSize: 24 }} />}
+                key={spd.label}
+                size="small"
+                onClick={() => setSpeed(spd.val)}
                 sx={{
-                  py: 1.4,
-                  fontWeight: 800,
-                  fontSize: '0.95rem',
-                  letterSpacing: '0.01em',
+                  py: 0.3,
+                  px: 1,
+                  minWidth: 32,
+                  fontSize: '0.72rem',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: simState.speed === spd.val ? 700 : 500,
+                  bgcolor: simState.speed === spd.val ? 'var(--color-amber)' : 'transparent',
+                  color: simState.speed === spd.val ? '#FFFFFF' : 'var(--color-ink)',
+                  borderRadius: 0,
+                  '&:hover': { bgcolor: simState.speed === spd.val ? 'var(--color-amber)' : 'var(--color-subtle-bg)' },
                 }}
               >
-                {loading ? 'Simulating & Populating Facility Data...' : 'Run Simulation & Populate Entire App'}
+                {spd.label}
               </Button>
-            </Box>
-          </Card>
-        </Grid>
+            ))}
+          </Box>
 
-        {/* Right Column: Live Projected Impact & Benchmark Delta */}
-        <Grid size={{ xs: 12, md: 5 }}>
-          <Card
+          {/* Fast-forward Day */}
+          <Button
             variant="outlined"
+            size="small"
+            startIcon={<FastForwardIcon sx={{ fontSize: 16 }} />}
+            onClick={fastForwardDay}
             sx={{
-              p: { xs: 2, sm: 2.75 },
-              borderRadius: 2.5,
-              borderColor: 'divider',
-              bgcolor: 'background.paper',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
+              borderRadius: '4px',
+              borderColor: 'var(--color-line)',
+              color: 'var(--color-ink)',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              textTransform: 'none',
+              '&:hover': { borderColor: 'var(--color-ink-muted)', bgcolor: 'var(--color-subtle-bg)' },
             }}
           >
-            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-              2. Projected Monthly Impact
-            </Typography>
+            Fast-forward 1 Day
+          </Button>
+        </Box>
 
-            {/* Main Spend Tile */}
-            <Box
-              sx={{
-                p: 2,
-                borderRadius: 2,
-                bgcolor: 'action.hover',
-                border: '1px solid',
-                borderColor: 'divider',
-              }}
-            >
-              <Typography variant="caption" color="text.secondary">
-                Total Projected Monthly Energy Spend
-              </Typography>
-              <Typography variant="h4" sx={{ fontWeight: 800, my: 0.5, letterSpacing: '-0.02em' }}>
-                ₹{liveMetrics.totalCost.toLocaleString('en-IN')}
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1, fontSize: '0.75rem', color: 'text.secondary' }}>
-                <span>Grid: <strong>₹{liveMetrics.gridCost.toLocaleString('en-IN')}</strong> ({liveMetrics.gridKwh.toLocaleString('en-IN')} kWh)</span>
-                {liveMetrics.dieselCost > 0 && (
-                  <span>• Diesel: <strong>₹{liveMetrics.dieselCost.toLocaleString('en-IN')}</strong> ({liveMetrics.dieselLitres} L)</span>
-                )}
-              </Box>
-            </Box>
+        {/* Right: Pitch Interventions (Trigger Outage Switch) */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={simState.gridOutageActive ? <RestoreIcon sx={{ fontSize: 16 }} /> : <OutageIcon sx={{ fontSize: 16 }} />}
+            onClick={toggleGridOutage}
+            sx={{
+              bgcolor: simState.gridOutageActive ? 'var(--color-sage)' : 'var(--color-rust)',
+              color: '#FFFFFF',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              textTransform: 'none',
+              borderRadius: '4px',
+              py: 0.6,
+              px: 1.5,
+              '&:hover': { opacity: 0.9 },
+            }}
+          >
+            {simState.gridOutageActive ? 'Restore Grid Power' : 'Simulate Grid Outage'}
+          </Button>
+        </Box>
+      </Box>
 
-            {/* Benchmark Comparison Tile */}
-            <Box
-              sx={{
-                p: 2,
-                borderRadius: 2,
-                border: '1px solid',
-                borderColor: isAboveBenchmark ? 'warning.main' : 'primary.main',
-                bgcolor: isAboveBenchmark ? 'rgba(245, 158, 11, 0.05)' : 'rgba(16, 185, 129, 0.05)',
-              }}
-            >
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                  Specific Energy Cost (₹/{liveMetrics.benchmark.unit})
-                </Typography>
-                <Chip
-                  label={`${isAboveBenchmark ? '+' : ''}${liveMetrics.costDeltaPercent}% vs BEE`}
-                  size="small"
-                  color={isAboveBenchmark ? 'warning' : 'primary'}
-                  sx={{ fontWeight: 700, fontSize: '0.72rem', height: 22 }}
-                />
-              </Box>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 1.5, my: 0.5 }}>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                  ₹{liveMetrics.specificCost.toFixed(2)}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  (BEE Peer Benchmark: ₹{liveMetrics.benchmarkCost.toFixed(2)})
-                </Typography>
-              </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.72rem' }}>
-                {isAboveBenchmark
-                  ? `Your facility is consuming ${liveMetrics.costDeltaPercent}% more energy money per unit than benchmark peers.`
-                  : `Your facility is beating the BEE sector benchmark by ${Math.abs(liveMetrics.costDeltaPercent)}%!`}
-              </Typography>
-            </Box>
+      {/* View Tabs */}
+      <Box sx={{ borderBottom: '1px solid var(--color-line)' }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_, val) => setActiveTab(val)}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '0.825rem',
+              color: 'var(--color-ink-muted)',
+              py: 1,
+              px: 2,
+              '&.Mui-selected': {
+                color: 'var(--color-ink)',
+              },
+            },
+            '& .MuiTabs-indicator': {
+              bgcolor: 'var(--color-amber)',
+              height: 2.5,
+            },
+          }}
+        >
+          <Tab icon={<HubIcon sx={{ fontSize: 17 }} />} iconPosition="start" label="Live Hub & Energy Flow Map" />
+          <Tab icon={<InventoryIcon sx={{ fontSize: 17 }} />} iconPosition="start" label="Resource Inventory & Stocks" />
+          <Tab icon={<ChartIcon sx={{ fontSize: 17 }} />} iconPosition="start" label="24h Consumption Profiles" />
+          <Tab icon={<RankingIcon sx={{ fontSize: 17 }} />} iconPosition="start" label="Machine Cost Benchmark" />
+          <Tab
+            icon={<AlertsIcon sx={{ fontSize: 17 }} />}
+            iconPosition="start"
+            label={`Efficiency Alerts (${simState.alerts.filter((a) => !a.resolved).length})`}
+          />
+        </Tabs>
+      </Box>
 
-            {/* Carbon & Savings Split Tiles */}
-            <Grid container spacing={1.5}>
-              <Grid size={{ xs: 12, sm: 6, md: 12, lg: 6 }}>
-                <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider' }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <CarbonIcon fontSize="small" sx={{ color: 'text.secondary' }} /> Carbon Footprint
-                  </Typography>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 800, mt: 0.25 }}>
-                    {liveMetrics.totalCo2Tonnes} <Typography component="span" variant="caption" color="text.secondary">T CO₂</Typography>
-                  </Typography>
-                </Box>
-              </Grid>
+      {/* Tab 0: Factory Hub & Energy Flow Map */}
+      {activeTab === 0 && (
+        <Box>
+          <FactoryEnergyFlowMap simState={simState} />
+          <LiveMachineCardsHub
+            machines={simState.machines}
+            gridOutageActive={simState.gridOutageActive}
+            onToggleMachine={toggleMachine}
+            onToggleAnomaly={toggleAnomaly}
+          />
+        </Box>
+      )}
 
-              <Grid size={{ xs: 12, sm: 6, md: 12, lg: 6 }}>
-                <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider' }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <SavingsIcon fontSize="small" sx={{ color: 'primary.main' }} /> Savings Potential
-                  </Typography>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 800, mt: 0.25, color: 'primary.main' }}>
-                    ₹{liveMetrics.totalPotentialSavings.toLocaleString('en-IN')}<Typography component="span" variant="caption" color="text.secondary">/mo</Typography>
-                  </Typography>
-                </Box>
-              </Grid>
-            </Grid>
+      {/* Tab 1: Resource Inventory View */}
+      {activeTab === 1 && (
+        <ResourceInventoryView
+          inventory={simState.inventory}
+          gridOutageActive={simState.gridOutageActive}
+          onRefuel={refuel}
+        />
+      )}
 
-            {/* Simulation Success Banner */}
-            {simulationResult && (
-              <Alert
-                icon={<SuccessIcon fontSize="inherit" />}
-                severity="success"
-                sx={{ borderRadius: 2, fontSize: '0.825rem' }}
-                action={
-                  <Button
-                    size="small"
-                    color="inherit"
-                    onClick={() => navigate('/')}
-                    sx={{ fontWeight: 700 }}
-                  >
-                    View Dashboard →
-                  </Button>
-                }
-              >
-                Simulation Complete! Populated {simulationResult.recordsCreated.months} months of energy bills, {simulationResult.recordsCreated.machinesCount} machines, and {simulationResult.recordsCreated.recommendationsCount} AI recommendations.
-              </Alert>
-            )}
+      {/* Tab 2: Consumption Over Time 24h Profile */}
+      {activeTab === 2 && (
+        <ConsumptionOverTimeChart hourlyData={simState.hourlyHistory} />
+      )}
 
-            {errorMsg && (
-              <Alert severity="error" sx={{ borderRadius: 2, fontSize: '0.825rem' }}>
-                {errorMsg}
-              </Alert>
-            )}
-          </Card>
-        </Grid>
-      </Grid>
+      {/* Tab 3: Machine Cost Benchmark */}
+      {activeTab === 3 && (
+        <CostPerMachineRanking machines={simState.machines} />
+      )}
+
+      {/* Tab 4: Efficiency Alerts Feed */}
+      {activeTab === 4 && (
+        <EfficiencyAlertsFeed
+          alerts={simState.alerts}
+          onResolveAlert={resolveAlert}
+        />
+      )}
     </Box>
   )
 }

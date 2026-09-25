@@ -32,6 +32,9 @@ import {
   BoltOutlined as EnergyIcon,
   LightModeOutlined as SunIcon,
   DarkModeOutlined as MoonIcon,
+  BarChartOutlined as BenchmarkIcon,
+  Co2Outlined as EmissionsIcon,
+  TuneOutlined as SimulatorIcon,
 } from '@mui/icons-material'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
@@ -41,8 +44,19 @@ import EnergyAssistant from '../assistant/EnergyAssistant'
 const NAV_ITEMS = [
   { label: 'Overview', path: '/', icon: <DashboardIcon sx={{ fontSize: 20 }} /> },
   { label: 'Ledger', path: '/ledger', icon: <LedgerIcon sx={{ fontSize: 20 }} /> },
+  { label: 'Benchmarks', path: '/benchmarks', icon: <BenchmarkIcon sx={{ fontSize: 20 }} /> },
+  { label: 'Decarb & CO₂', path: '/emissions', icon: <EmissionsIcon sx={{ fontSize: 20 }} /> },
   { label: 'Advisory', path: '/recommendations', icon: <AiIcon sx={{ fontSize: 20 }} /> },
+  { label: 'Simulator', path: '/simulator', icon: <SimulatorIcon sx={{ fontSize: 20 }} /> },
   { label: 'Equipment', path: '/profile', icon: <FactoryIcon sx={{ fontSize: 20 }} /> },
+]
+
+const MOBILE_NAV_ITEMS = [
+  { label: 'Overview', path: '/', icon: <DashboardIcon sx={{ fontSize: 18 }} /> },
+  { label: 'Ledger', path: '/ledger', icon: <LedgerIcon sx={{ fontSize: 18 }} /> },
+  { label: 'Benchmark', path: '/benchmarks', icon: <BenchmarkIcon sx={{ fontSize: 18 }} /> },
+  { label: 'Decarb', path: '/emissions', icon: <EmissionsIcon sx={{ fontSize: 18 }} /> },
+  { label: 'Advisory', path: '/recommendations', icon: <AiIcon sx={{ fontSize: 18 }} /> },
 ]
 
 export default function AppShell() {
@@ -66,7 +80,7 @@ export default function AppShell() {
 
   const currentNavIndex = Math.max(
     0,
-    NAV_ITEMS.findIndex((item) =>
+    MOBILE_NAV_ITEMS.findIndex((item) =>
       item.path === '/'
         ? location.pathname === '/'
         : location.pathname.startsWith(item.path)
@@ -93,10 +107,10 @@ export default function AppShell() {
             sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
             onClick={() => navigate('/')}
           >
-            <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'primary.contrastText' }}>
-              <EnergyIcon sx={{ fontSize: 18 }} />
+            <Box sx={{ width: 26, height: 26, borderRadius: '4px', bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF' }}>
+              <EnergyIcon sx={{ fontSize: 17 }} />
             </Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>Energize<span style={{ color: isDark ? '#34D399' : '#0F766E' }}>U</span></Typography>
+            <Typography variant="h6" sx={{ fontWeight: 600, letterSpacing: '-0.02em', color: 'text.primary' }}>Energize<span style={{ color: 'var(--color-amber)' }}>U</span></Typography>
           </Box>
 
           {/* Right Controls: Facility badge + Theme toggle + Profile */}
@@ -108,7 +122,7 @@ export default function AppShell() {
                 variant="outlined"
                 sx={{
                   display: { xs: 'none', sm: 'inline-flex' },
-                  borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#CBD5E1',
+                  borderColor: 'var(--color-line)',
                   color: 'text.secondary',
                   fontSize: '0.725rem',
                 }}
@@ -146,15 +160,15 @@ export default function AppShell() {
                 paper: {
                   sx: {
                     bgcolor: 'background.paper',
-                    border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0'}`,
+                    border: '1px solid var(--color-line)',
                     minWidth: 190,
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    boxShadow: isDark ? '0 4px 12px rgba(0, 0, 0, 0.4)' : '0 4px 12px rgba(0, 0, 0, 0.08)',
                   },
                 },
               }}
             >
               <Box sx={{ px: 2, py: 1 }}>
-                <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600 }}>
+                <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600, color: 'text.primary' }}>
                   {business?.name || 'Demo MSME'}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
@@ -162,6 +176,10 @@ export default function AppShell() {
                 </Typography>
               </Box>
               <Divider sx={{ my: 0.5 }} />
+              <MenuItem onClick={() => { handleMenuClose(); navigate('/simulator'); }}>
+                <ListItemIcon><SimulatorIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primaryTypographyProps={{ fontSize: '0.825rem' }}>Scenario Simulator</ListItemText>
+              </MenuItem>
               <MenuItem onClick={() => { handleMenuClose(); navigate('/profile'); }}>
                 <ListItemIcon><FactoryIcon fontSize="small" /></ListItemIcon>
                 <ListItemText primaryTypographyProps={{ fontSize: '0.825rem' }}>Equipment & Profile</ListItemText>
@@ -207,25 +225,30 @@ export default function AppShell() {
                     selected={isSelected}
                     onClick={() => navigate(item.path)}
                     sx={{
-                      borderRadius: 1.5,
+                      borderRadius: '3px',
                       mb: 0.35,
-                      py: 1,
+                      py: 0.85,
                       px: 1.25,
+                      borderLeft: isSelected ? '2px solid var(--color-amber)' : '2px solid transparent',
+                      bgcolor: isSelected ? 'rgba(158, 93, 18, 0.08)' : 'transparent',
+                      '&:hover': {
+                        bgcolor: 'var(--color-subtle-bg)',
+                      },
                       '&.Mui-selected': {
-                        bgcolor: isDark ? 'rgba(52, 211, 153, 0.12)' : 'rgba(15, 118, 110, 0.08)',
-                        color: isDark ? 'primary.light' : 'primary.main',
+                        bgcolor: 'rgba(158, 93, 18, 0.08)',
+                        color: 'text.primary',
                         '& .MuiListItemIcon-root': {
-                          color: isDark ? 'primary.main' : 'primary.main',
+                          color: 'var(--color-amber)',
                         },
                       },
                     }}
                   >
-                    <ListItemIcon sx={{ minWidth: 28, color: 'text.secondary' }}>
+                    <ListItemIcon sx={{ minWidth: 28, color: isSelected ? 'var(--color-amber)' : 'text.secondary' }}>
                       {item.icon}
                     </ListItemIcon>
                     <ListItemText
                       primary={item.label}
-                      primaryTypographyProps={{ fontSize: '0.825rem', fontWeight: isSelected ? 600 : 500 }}
+                      primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: isSelected ? 600 : 400 }}
                     />
                   </ListItemButton>
                 )
@@ -267,7 +290,7 @@ export default function AppShell() {
             showLabels
             value={currentNavIndex}
             onChange={(_, newValue) => {
-              navigate(NAV_ITEMS[newValue].path)
+              navigate(MOBILE_NAV_ITEMS[newValue].path)
             }}
             sx={{
               height: 54,
@@ -289,7 +312,7 @@ export default function AppShell() {
               },
             }}
           >
-            {NAV_ITEMS.map((item) => (
+            {MOBILE_NAV_ITEMS.map((item) => (
               <BottomNavigationAction
                 key={item.path}
                 label={item.label}

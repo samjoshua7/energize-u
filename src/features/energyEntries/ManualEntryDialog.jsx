@@ -106,23 +106,34 @@ export default function ManualEntryDialog({
       onClose={onClose}
       maxWidth="sm"
       fullWidth
-      slotProps={{ paper: { sx: { bgcolor: 'background.paper', borderRadius: 3 } } }}
+      slotProps={{
+        paper: {
+          sx: {
+            bgcolor: 'var(--color-surface, #1C222A)',
+            border: '1px solid var(--color-line)',
+            borderRadius: '4px',
+            backgroundImage: 'none',
+            boxShadow: 'none',
+          },
+        },
+      }}
     >
-      <DialogTitle sx={{ fontWeight: 700 }}>
-        Log Energy & Fuel Entry (Manual)
+      <DialogTitle sx={{ fontWeight: 700, borderBottom: '1px solid var(--color-line)', pb: 2 }}>
+        Log energy & fuel entry
       </DialogTitle>
       <Box component="form" onSubmit={handleSubmit}>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-          {errorMsg && <Alert severity="error">{errorMsg}</Alert>}
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2.5 }}>
+          {errorMsg && <Alert severity="error" sx={{ borderRadius: '4px' }}>{errorMsg}</Alert>}
 
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 select
-                label="Source / Fuel Type"
+                label="Source / fuel type"
                 fullWidth
                 value={sourceType}
                 onChange={(e) => setSourceType(e.target.value)}
+                slotProps={{ select: { sx: { borderRadius: '4px' } } }}
               >
                 {Object.keys(SOURCE_TYPES).map((k) => (
                   <MenuItem key={k} value={SOURCE_TYPES[k]}>
@@ -135,10 +146,11 @@ export default function ManualEntryDialog({
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 select
-                label="Assign to Machine (Optional)"
+                label="Assign to machine (optional)"
                 fullWidth
                 value={machineId}
                 onChange={(e) => setMachineId(e.target.value)}
+                slotProps={{ select: { sx: { borderRadius: '4px' } } }}
               >
                 <MenuItem value="">— None (Facility-wide) —</MenuItem>
                 {machines.map((m) => (
@@ -151,11 +163,14 @@ export default function ManualEntryDialog({
 
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
-                label="Period Start Date"
+                label="Period start date"
                 type="date"
                 required
                 fullWidth
-                slotProps={{ inputLabel: { shrink: true } }}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  input: { sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' } },
+                }}
                 value={periodStart}
                 onChange={(e) => setPeriodStart(e.target.value)}
               />
@@ -163,11 +178,14 @@ export default function ManualEntryDialog({
 
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
-                label="Period End Date"
+                label="Period end date"
                 type="date"
                 required
                 fullWidth
-                slotProps={{ inputLabel: { shrink: true } }}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  input: { sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' } },
+                }}
                 value={periodEnd}
                 onChange={(e) => setPeriodEnd(e.target.value)}
               />
@@ -182,6 +200,7 @@ export default function ManualEntryDialog({
                 slotProps={{
                   input: {
                     endAdornment: <InputAdornment position="end">{quantityUnit}</InputAdornment>,
+                    sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' },
                   },
                 }}
                 value={quantity}
@@ -192,13 +211,14 @@ export default function ManualEntryDialog({
 
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
-                label="Total Cost (INR)"
+                label="Total cost (INR)"
                 type="number"
                 required
                 fullWidth
                 slotProps={{
                   input: {
                     startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                    sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' },
                   },
                 }}
                 value={costAmount}
@@ -210,9 +230,10 @@ export default function ManualEntryDialog({
             {sourceType === 'grid' && (
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
-                  label="Sanctioned / Recorded Load (kVA)"
+                  label="Sanctioned / recorded load (kVA)"
                   type="number"
                   fullWidth
+                  slotProps={{ input: { sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' } } }}
                   value={kvaLoad}
                   onChange={(e) => setKvaLoad(e.target.value)}
                   placeholder="e.g. 45"
@@ -223,9 +244,10 @@ export default function ManualEntryDialog({
             {['diesel', 'petrol', 'kerosene'].includes(sourceType) && (
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
-                  label="Genset / Burner Runtime (Hours)"
+                  label="Genset / burner runtime (hours)"
                   type="number"
                   fullWidth
+                  slotProps={{ input: { sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' } } }}
                   value={runtimeHours}
                   onChange={(e) => setRuntimeHours(e.target.value)}
                   placeholder="e.g. 18.5"
@@ -235,8 +257,9 @@ export default function ManualEntryDialog({
 
             <Grid size={{ xs: 12 }}>
               <TextField
-                label="Notes / Receipt Invoice No."
+                label="Notes / receipt invoice no."
                 fullWidth
+                slotProps={{ input: { sx: { borderRadius: '4px' } } }}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="e.g. HPCL petrol pump receipt #8921"
@@ -244,12 +267,24 @@ export default function ManualEntryDialog({
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={onClose} color="inherit">
+        <DialogActions sx={{ px: 3, pb: 2.5, borderTop: '1px solid var(--color-line)', pt: 2 }}>
+          <Button onClick={onClose} sx={{ color: 'var(--color-ink-muted)', textTransform: 'none', borderRadius: '4px' }}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" color="primary" disabled={loading}>
-            {loading ? <CircularProgress size={20} color="inherit" /> : 'Save Entry'}
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={loading}
+            sx={{
+              bgcolor: 'var(--color-amber)',
+              color: '#14181D',
+              fontWeight: 700,
+              borderRadius: '4px',
+              textTransform: 'none',
+              '&:hover': { bgcolor: '#c47d25' },
+            }}
+          >
+            {loading ? <CircularProgress size={20} color="inherit" /> : 'Save entry'}
           </Button>
         </DialogActions>
       </Box>

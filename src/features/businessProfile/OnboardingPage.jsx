@@ -1,861 +1,584 @@
-import Grid from '@mui/material/Grid2'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Box,
-  Card,
-  CardContent,
+  Container,
   Typography,
   TextField,
-  Button,
   MenuItem,
-  FormControlLabel,
-  Switch,
-  CircularProgress,
+  Button,
   Alert,
-  Chip,
+  Stack,
+  Switch,
+  FormControlLabel,
   Stepper,
   Step,
   StepLabel,
-  IconButton,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
+  Divider,
 } from '@mui/material'
 import {
-  PrecisionManufacturingOutlined as FactoryIcon,
-  DeleteOutline as DeleteIcon,
-  Add as AddIcon,
-  CheckCircleOutline as CheckIcon,
+  ReceiptOutlined as BillIcon,
   BoltOutlined as EnergyIcon,
-  SpeedOutlined as OutputIcon,
-  ArrowForward as ArrowIcon,
-  ArrowBack as BackIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { createBusinessProfile, updateBusinessProfile } from './api'
-import { createMachine } from '../machines/api'
-import { createEnergyEntry } from '../energyEntries/api'
-import { createOutputRecord } from '../outputRecords/api'
-import { SECTORS, SHIFT_PATTERNS, INDIAN_STATES, SOURCE_TYPES, SOURCE_TYPE_LABELS } from '../../lib/constants'
+import {
+  createBusinessProfile,
+  updateBusinessProfile,
+  getBusinessProfile,
+  getTariffReferences,
+} from './api'
+import { getMachines, createMachine, updateMachine } from '../machines/api'
+import { SECTORS, INDIAN_STATES } from '../../lib/constants'
+import BillUploadDialog from '../energyEntries/BillUploadDialog'
 
-const SECTOR_PRESET_MACHINES = {
-  printing: [
-    { name: '4-Color Offset Printing Press', machine_type: 'offset_press', primary_fuel: 'grid', power_rating_kw: 38, age_years: 5 },
-    { name: 'Kirloskar 62.5 kVA Diesel Generator', machine_type: 'genset', primary_fuel: 'diesel', power_rating_kw: 50, age_years: 3 },
-    { name: 'High-Speed Paper Cutting Machine', machine_type: 'cutter', primary_fuel: 'grid', power_rating_kw: 15, age_years: 4 },
-    { name: 'Rotary Screw Air Compressor', machine_type: 'compressor', primary_fuel: 'grid', power_rating_kw: 11, age_years: 2 },
-  ],
-  textile: [
-    { name: 'Rapier Weaving Looms (Set of 12)', machine_type: 'looms', primary_fuel: 'grid', power_rating_kw: 36, age_years: 4 },
-    { name: '125 kVA Diesel Generator', machine_type: 'genset', primary_fuel: 'diesel', power_rating_kw: 100, age_years: 3 },
-    { name: 'Sectional Warping Machine', machine_type: 'warping', primary_fuel: 'grid', power_rating_kw: 15, age_years: 6 },
-    { name: 'Kerosene / Gas Steam Boiler', machine_type: 'boiler', primary_fuel: 'kerosene', power_rating_kw: 45, age_years: 5 },
-  ],
-  metal_fabrication: [
-    { name: 'CNC Turning & Milling Center', machine_type: 'cnc', primary_fuel: 'grid', power_rating_kw: 25, age_years: 3 },
-    { name: 'MIG / TIG Welding Stations', machine_type: 'welding', primary_fuel: 'grid', power_rating_kw: 18, age_years: 4 },
-    { name: 'Hydraulic Press Brake (100 Ton)', machine_type: 'press', primary_fuel: 'grid', power_rating_kw: 35, age_years: 5 },
-    { name: 'Diesel Genset 62.5 kVA', machine_type: 'genset', primary_fuel: 'diesel', power_rating_kw: 50, age_years: 2 },
-  ],
-  general: [
-    { name: 'Main Production Line', machine_type: 'production_line', primary_fuel: 'grid', power_rating_kw: 30, age_years: 4 },
-    { name: 'Backup Diesel Generator', machine_type: 'genset', primary_fuel: 'diesel', power_rating_kw: 50, age_years: 3 },
-    { name: 'Central Air Compressor', machine_type: 'compressor', primary_fuel: 'grid', power_rating_kw: 15, age_years: 2 },
-  ],
-}
+const OUTPUT_UNIT_PRESETS = [
+  { label: 'per 1,000 prints (Printing)', unit: 'prints', scale: 1000 },
+  { label: 'per meter of fabric (Textile)', unit: 'meters', scale: 1 },
+  { label: 'per kg processed (Metal / Food / Chemical)', unit: 'kg', scale: 1 },
+  { label: 'per 100 parts produced (Machining)', unit: 'parts', scale: 100 },
+  { label: 'Custom output unit', unit: 'custom', scale: 1 },
+]
 
-const STEPS = ['Facility Basics', 'Machinery Inventory', 'Baseline Resources & Output']
+const COMMON_GENSET_RATINGS = [
+  5, 7.5, 10, 15, 20, 25, 30, 40, 50, 62.5, 82.5, 100, 125, 160, 200, 250, 320, 500,
+]
 
 export default function OnboardingPage() {
-  const navigate = useNavigate()
   const { user, business, refreshBusiness } = useAuth()
+  const navigate = useNavigate()
 
-  const [activeStep, setActiveStep] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [errorMsg, setErrorMsg] = useState('')
+  const [step, setStep] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [billOpen, setBillOpen] = useState(false)
+  const [billSaved, setBillSaved] = useState(false)
+  const [businessId, setBusinessId] = useState(business?.business_id)
+  const [generator, setGenerator] = useState(null)
+  const [tariffRefs, setTariffRefs] = useState([])
+  const [selectedPreset, setSelectedPreset] = useState('per 1,000 prints (Printing)')
 
-  // Step 1: Facility Basics
-  const [facilityData, setFacilityData] = useState({
+  const [form, setForm] = useState({
     name: business?.name || '',
     sector: business?.sector || 'printing',
-    location_state: business?.location_state || 'Maharashtra',
+    location_state: business?.location_state || 'Tamil Nadu',
     location_city: business?.location_city || '',
-    employee_count: business?.employee_count ? String(business.employee_count) : '20',
-    shift_pattern: business?.shift_pattern || 'single_shift',
+    primary_output_unit: business?.primary_output_unit || 'prints',
+    output_unit_scale: business?.output_unit_scale || 1000,
     has_solar: business?.has_solar || false,
-    solar_capacity_kw: '',
+    solar_capacity_kw: business?.solar_capacity_kw || '',
+    discom_name: business?.discom_name || '',
+    tariff_category: business?.tariff_category || 'LT-IV',
+    has_generator: true,
+    fuel: 'diesel',
+    kva: 62.5,
   })
 
-  // Step 2: Machinery Inventory
-  const [machinesList, setMachinesList] = useState([
-    {
-      id: 'm_init_1',
-      name: 'Main Production Machinery',
-      machine_type: 'production_machine',
-      primary_fuel: 'grid',
-      power_rating_kw: 35,
-      age_years: 4,
-    },
-    {
-      id: 'm_init_2',
-      name: 'Diesel Generator Backup',
-      machine_type: 'genset',
-      primary_fuel: 'diesel',
-      power_rating_kw: 50,
-      age_years: 3,
-    },
-  ])
-
-  const [customMachine, setCustomMachine] = useState({
-    name: '',
-    machine_type: 'machinery',
-    primary_fuel: 'grid',
-    power_rating_kw: '',
-    age_years: '',
-  })
-
-  // Step 3: Baseline Resources & Output
-  const [baselineData, setBaselineData] = useState({
-    monthly_kwh: '4500',
-    monthly_grid_spend: '42750',
-    has_diesel_backup: true,
-    monthly_diesel_litres: '280',
-    monthly_diesel_spend: '25760',
-    output_quantity: '50000',
-    output_unit: 'sheets',
-  })
-
-  const sectorPresets = SECTOR_PRESET_MACHINES[facilityData.sector] || SECTOR_PRESET_MACHINES.general
-
-  const handleFacilityChange = (field) => (e) => {
-    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
-    setFacilityData((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const handleBaselineChange = (field) => (e) => {
-    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
-    setBaselineData((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const handleAddPresetMachine = (preset) => {
-    setMachinesList((prev) => [
-      ...prev,
-      {
-        id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        ...preset,
-      },
-    ])
-  }
-
-  const handleAddCustomMachine = (e) => {
-    e.preventDefault()
-    if (!customMachine.name.trim()) return
-
-    setMachinesList((prev) => [
-      ...prev,
-      {
-        id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        name: customMachine.name.trim(),
-        machine_type: customMachine.machine_type || 'machinery',
-        primary_fuel: customMachine.primary_fuel,
-        power_rating_kw: customMachine.power_rating_kw ? parseFloat(customMachine.power_rating_kw) : null,
-        age_years: customMachine.age_years ? parseFloat(customMachine.age_years) : null,
-      },
-    ])
-
-    setCustomMachine({
-      name: '',
-      machine_type: 'machinery',
-      primary_fuel: 'grid',
-      power_rating_kw: '',
-      age_years: '',
-    })
-  }
-
-  const handleRemoveMachine = (id) => {
-    setMachinesList((prev) => prev.filter((m) => m.id !== id))
-  }
-
-  const handleNext = () => {
-    if (activeStep === 0) {
-      if (!facilityData.name || !facilityData.sector || !facilityData.location_state) {
-        setErrorMsg('Please complete required facility fields (Name, Sector, State).')
-        return
-      }
-    }
-    setErrorMsg('')
-    setActiveStep((prev) => prev + 1)
-  }
-
-  const handleBack = () => {
-    setErrorMsg('')
-    setActiveStep((prev) => prev - 1)
-  }
-
-  const handleSkipToDashboard = async () => {
-    try {
-      setLoading(true)
-      // Save basic facility profile if not created yet
-      if (!business?.business_id && user?.id) {
-        const payload = {
-          owner_id: user.id,
-          name: facilityData.name.trim() || 'My Industrial Facility',
-          sector: facilityData.sector,
-          location_state: facilityData.location_state,
-          location_city: facilityData.location_city.trim() || null,
-          employee_count: facilityData.employee_count ? parseInt(facilityData.employee_count, 10) : 15,
-          shift_pattern: facilityData.shift_pattern,
-          has_solar: facilityData.has_solar,
-        }
-        await createBusinessProfile(payload)
-        await refreshBusiness()
-      }
-      navigate('/', { replace: true })
-    } catch (err) {
-      console.warn('Skip profile notice:', err)
-      navigate('/', { replace: true })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleFinishSetup = async () => {
-    try {
-      setLoading(true)
-      setErrorMsg('')
-
-      let targetBusinessId = business?.business_id
-
-      // 1. Create or Update Business Profile
-      const bizPayload = {
-        name: facilityData.name.trim(),
-        sector: facilityData.sector,
-        location_state: facilityData.location_state,
-        location_city: facilityData.location_city.trim() || null,
-        employee_count: facilityData.employee_count ? parseInt(facilityData.employee_count, 10) : null,
-        shift_pattern: facilityData.shift_pattern,
-        has_solar: facilityData.has_solar,
-      }
-
-      if (targetBusinessId) {
-        await updateBusinessProfile(targetBusinessId, bizPayload)
-      } else {
-        const created = await createBusinessProfile({
-          owner_id: user?.id,
-          ...bizPayload,
-        })
-        targetBusinessId = created?.business_id
-      }
-
-      // 2. Batch Create Machinery Inventory
-      if (targetBusinessId && machinesList.length > 0) {
-        for (const m of machinesList) {
-          try {
-            await createMachine({
-              business_id: targetBusinessId,
-              name: m.name,
-              machine_type: m.machine_type,
-              primary_fuel: m.primary_fuel,
-              power_rating_kw: m.power_rating_kw,
-              age_years: m.age_years,
-            })
-          } catch (mErr) {
-            console.warn('Machine create notice:', mErr)
+  useEffect(() => {
+    if (business?.business_id) {
+      setBusinessId(business.business_id)
+      getMachines(business.business_id)
+        .then((rows) => {
+          const genset = rows.find((m) => m.machine_type === 'genset')
+          if (genset) {
+            setGenerator(genset)
+            setForm((prev) => ({
+              ...prev,
+              has_generator: true,
+              fuel: genset.primary_fuel,
+              kva: genset.kva_rating || 62.5,
+            }))
           }
-        }
+        })
+        .catch(console.error)
+    }
+  }, [business?.business_id])
+
+  useEffect(() => {
+    let active = true
+    if (form.location_state) {
+      getTariffReferences(form.location_state)
+        .then((rows) => {
+          if (active) setTariffRefs(rows || [])
+        })
+        .catch(console.error)
+    }
+    return () => {
+      active = false
+    }
+  }, [form.location_state])
+
+  const handleField = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))
+
+  const handlePresetChange = (e) => {
+    const val = e.target.value
+    setSelectedPreset(val)
+    const preset = OUTPUT_UNIT_PRESETS.find((p) => p.label === val)
+    if (preset && preset.unit !== 'custom') {
+      setForm((prev) => ({
+        ...prev,
+        primary_output_unit: preset.unit,
+        output_unit_scale: preset.scale,
+      }))
+    }
+  }
+
+  async function handleSaveProfile(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      if (!form.name.trim() || !form.primary_output_unit.trim() || !(Number(form.output_unit_scale) > 0)) {
+        throw new Error('Please enter business name and valid output basis.')
       }
 
-      // 3. Create Baseline Energy Entries
-      if (targetBusinessId) {
-        const now = new Date()
-        const periodEnd = now.toISOString().split('T')[0]
-        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-        const periodStart = lastMonth.toISOString().split('T')[0]
+      if (form.has_generator && !(Number(form.kva) > 0)) {
+        throw new Error('Please select your generator rating in kVA.')
+      }
 
-        // Baseline Grid Entry
-        if (baselineData.monthly_kwh && baselineData.monthly_grid_spend) {
-          await createEnergyEntry({
-            business_id: targetBusinessId,
-            source_type: 'grid',
-            entry_source: 'manual',
-            period_start: periodStart,
-            period_end: periodEnd,
-            quantity: parseFloat(baselineData.monthly_kwh),
-            quantity_unit: 'kWh',
-            cost_amount: parseFloat(baselineData.monthly_grid_spend),
-            notes: 'Baseline electricity consumption logged during setup',
-          })
-        }
+      if (form.has_solar && !(Number(form.solar_capacity_kw) > 0)) {
+        throw new Error('Please enter approximate solar capacity in kW.')
+      }
 
-        // Baseline Diesel Entry
-        if (baselineData.has_diesel_backup && baselineData.monthly_diesel_litres) {
-          await createEnergyEntry({
-            business_id: targetBusinessId,
-            source_type: 'diesel',
-            entry_source: 'manual',
-            period_start: periodStart,
-            period_end: periodEnd,
-            quantity: parseFloat(baselineData.monthly_diesel_litres),
-            quantity_unit: 'litre',
-            cost_amount: parseFloat(baselineData.monthly_diesel_spend || '0'),
-            notes: 'Baseline generator fuel consumption logged during setup',
-          })
-        }
+      const values = {
+        name: form.name.trim(),
+        sector: form.sector,
+        location_state: form.location_state,
+        location_city: form.location_city.trim() || null,
+        primary_output_unit: form.primary_output_unit.trim().toLowerCase(),
+        output_unit_scale: Number(form.output_unit_scale),
+        has_solar: form.has_solar,
+        solar_capacity_kw: form.has_solar ? Number(form.solar_capacity_kw) : null,
+        discom_name: form.discom_name.trim() || null,
+        tariff_category: form.tariff_category.trim() || null,
+      }
 
-        // 4. Create Baseline Production Output
-        if (baselineData.output_quantity) {
-          await createOutputRecord({
-            business_id: targetBusinessId,
-            period_start: periodStart,
-            period_end: periodEnd,
-            output_quantity: parseFloat(baselineData.output_quantity),
-            output_unit: baselineData.output_unit || 'units',
-            notes: 'Initial production output baseline recorded during setup',
-          })
+      const existing = businessId ? { business_id: businessId } : await getBusinessProfile(user.id)
+      const saved = existing
+        ? await updateBusinessProfile(existing.business_id, values)
+        : await createBusinessProfile({ ...values, owner_id: user.id })
+
+      setBusinessId(saved.business_id)
+
+      if (form.has_generator) {
+        const genValues = {
+          business_id: saved.business_id,
+          name: `${form.kva} kVA ${form.fuel.toUpperCase()} Generator`,
+          machine_type: 'genset',
+          primary_fuel: form.fuel,
+          kva_rating: Number(form.kva),
         }
+        const existingMachines = await getMachines(saved.business_id).catch(() => [])
+        const currentGen = generator || existingMachines.find((m) => m.machine_type === 'genset')
+        const savedGen = currentGen
+          ? await updateMachine(currentGen.machine_id, genValues)
+          : await createMachine(genValues)
+        setGenerator(savedGen)
       }
 
       await refreshBusiness()
-      navigate('/', { replace: true })
+      setStep(1)
     } catch (err) {
-      console.error('Failed to complete onboarding setup:', err)
-      setErrorMsg(err.message || 'Error saving facility setup. Please try again.')
+      setError(err.message || 'Could not save profile details.')
     } finally {
-      setLoading(false)
+      setBusy(false)
+    }
+  }
+
+  async function handleFinish() {
+    setBusy(true)
+    setError('')
+    try {
+      if (businessId) {
+        await updateBusinessProfile(businessId, { onboarding_completed_at: new Date().toISOString() })
+      }
+      await refreshBusiness()
+      navigate('/')
+    } catch {
+      setError('Could not finish setup. Please try again.')
+    } finally {
+      setBusy(false)
     }
   }
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        bgcolor: 'background.default',
-        py: { xs: 3, sm: 5 },
-        px: { xs: 2, sm: 3 },
-      }}
-    >
-      <Box sx={{ maxWidth: 840, mx: 'auto' }}>
-        {/* Top Header & Skip Action */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Box
-              sx={{
-                width: 44,
-                height: 44,
-                borderRadius: 2,
-                bgcolor: 'primary.main',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FFFFFF',
-              }}
+    <Container maxWidth="md" sx={{ py: { xs: 3, sm: 5 } }}>
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="caption" sx={{ color: 'var(--color-amber)', fontWeight: 600, display: 'block', mb: 0.5 }}>
+          Facility onboarding
+        </Typography>
+        <Typography variant="h4" sx={{ fontWeight: 600, color: 'var(--color-ink)', letterSpacing: '-0.02em' }}>
+          One-time facility profile setup
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'var(--color-ink-muted)', mt: 0.5, maxWidth: '75ch' }}>
+          Configure your plant parameters, fuel sources, and production basis to enable unified ₹/unit and CO₂ tracking across grid, diesel, and solar.
+        </Typography>
+      </Box>
+
+      {/* Numbered Steps: Valid for sequential flow per DESIGN.md */}
+      <Stepper
+        activeStep={step}
+        sx={{
+          mb: 4,
+          '& .MuiStepLabel-label': {
+            color: 'var(--color-ink-muted)',
+            fontSize: '0.85rem',
+            '&.Mui-active': { color: 'var(--color-amber)', fontWeight: 600 },
+            '&.Mui-completed': { color: 'var(--color-sage)' },
+          },
+          '& .MuiStepIcon-root': {
+            color: 'var(--color-surface, #1C222A)',
+            border: '1px solid var(--color-line)',
+            borderRadius: '50%',
+            '&.Mui-active': { color: 'var(--color-amber)' },
+            '&.Mui-completed': { color: 'var(--color-sage)' },
+          },
+        }}
+      >
+        <Step>
+          <StepLabel>1. Facility & machinery</StepLabel>
+        </Step>
+        <Step>
+          <StepLabel>2. First electricity bill (OCR)</StepLabel>
+        </Step>
+      </Stepper>
+
+      {error && (
+        <Alert
+          severity="error"
+          sx={{
+            mb: 3,
+            borderRadius: '4px',
+            bgcolor: 'rgba(193, 85, 58, 0.12)',
+            color: 'var(--color-ink)',
+            border: '1px solid rgba(193, 85, 58, 0.3)',
+          }}
+        >
+          {error}
+        </Alert>
+      )}
+
+      {step === 0 ? (
+        <Box
+          component="form"
+          onSubmit={handleSaveProfile}
+          sx={{
+            p: { xs: 2.5, sm: 3.5 },
+            bgcolor: 'var(--color-surface, #1C222A)',
+            border: '1px solid var(--color-line)',
+            borderRadius: '4px',
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'var(--color-ink)', mb: 2 }}>
+            1. Business identity & location
+          </Typography>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5, mb: 3 }}>
+            <TextField
+              required
+              label="Business name"
+              placeholder="e.g. Sivakasi Fine Arts Press"
+              value={form.name}
+              onChange={handleField('name')}
+              size="small"
+            />
+            <TextField
+              required
+              select
+              label="Business sector"
+              value={form.sector}
+              onChange={handleField('sector')}
+              size="small"
             >
-              <FactoryIcon sx={{ fontSize: 26 }} />
-            </Box>
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
-                Setup Your Facility Intelligence
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Configure equipment and energy baseline for instant BEE benchmarks
-              </Typography>
+              {SECTORS.map((s) => (
+                <MenuItem key={s.value} value={s.value}>
+                  {s.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              required
+              select
+              label="State (for grid emission factor & tariff)"
+              value={form.location_state}
+              onChange={handleField('location_state')}
+              size="small"
+            >
+              {INDIAN_STATES.map((s) => (
+                <MenuItem key={s} value={s}>
+                  {s}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="City / industrial cluster"
+              placeholder="e.g. Peenya Industrial Area, Bengaluru"
+              value={form.location_city}
+              onChange={handleField('location_city')}
+              size="small"
+            />
+          </Box>
+
+          <Divider sx={{ my: 3, borderColor: 'var(--color-line)' }} />
+
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'var(--color-ink)', mb: 0.5 }}>
+            2. Primary output unit (cost divisor)
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)', display: 'block', mb: 2 }}>
+            All multi-fuel expenditures (grid + diesel + thermal) will divide by this unit to calculate your headline ₹/unit metric.
+          </Typography>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5, mb: 3 }}>
+            <TextField
+              select
+              label="Output unit preset"
+              value={selectedPreset}
+              onChange={handlePresetChange}
+              size="small"
+            >
+              {OUTPUT_UNIT_PRESETS.map((p) => (
+                <MenuItem key={p.label} value={p.label}>
+                  {p.label}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                required
+                label="Unit label"
+                value={form.primary_output_unit}
+                onChange={handleField('primary_output_unit')}
+                size="small"
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                required
+                type="number"
+                label="Scale multiplier"
+                inputProps={{ min: 1 }}
+                value={form.output_unit_scale}
+                onChange={handleField('output_unit_scale')}
+                size="small"
+                sx={{ width: 140 }}
+              />
             </Box>
           </Box>
 
-          <Button
-            variant="text"
-            color="inherit"
-            onClick={handleSkipToDashboard}
-            disabled={loading}
-            sx={{ fontWeight: 600, fontSize: '0.85rem' }}
-          >
-            Skip to Dashboard →
-          </Button>
-        </Box>
+          <Divider sx={{ my: 3, borderColor: 'var(--color-line)' }} />
 
-        {/* Stepper Progress */}
-        <Card variant="outlined" sx={{ mb: 3, p: 2, borderRadius: 2, borderColor: 'divider' }}>
-          <Stepper activeStep={activeStep} alternativeLabel>
-            {STEPS.map((label) => (
-              <Step key={label}>
-                <StepLabel>{label}</StepLabel>
-              </Step>
-            ))}
-          </Stepper>
-        </Card>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'var(--color-ink)', mb: 2 }}>
+            3. Backup generator & solar presence
+          </Typography>
 
-        {errorMsg && (
-          <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
-            {errorMsg}
-          </Alert>
-        )}
-
-        {/* ================= STEP 1: FACILITY PROFILE ================= */}
-        {activeStep === 0 && (
-          <Card variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2.5, borderColor: 'divider' }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-              Facility Profile & Operations
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Your sector determines the specific energy benchmark against peer MSMEs in India.
-            </Typography>
-
-            <Grid container spacing={2.5}>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  label="Business / Factory Name"
-                  fullWidth
-                  required
-                  value={facilityData.name}
-                  onChange={handleFacilityChange('name')}
-                  placeholder="e.g. Apex Offset Printers or Shri Ganesh Weaving"
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  select
-                  label="Industrial Sector"
-                  fullWidth
-                  required
-                  value={facilityData.sector}
-                  onChange={handleFacilityChange('sector')}
-                  helperText="Matches BEE benchmarks and peer consumption curves"
-                >
-                  {SECTORS.map((s) => (
-                    <MenuItem key={s.value} value={s.value}>
-                      {s.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  select
-                  label="State (for DISCOM Grid Tariffs)"
-                  fullWidth
-                  required
-                  value={facilityData.location_state}
-                  onChange={handleFacilityChange('location_state')}
-                >
-                  {INDIAN_STATES.map((state) => (
-                    <MenuItem key={state} value={state}>
-                      {state}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="City / Industrial Cluster"
-                  fullWidth
-                  value={facilityData.location_city}
-                  onChange={handleFacilityChange('location_city')}
-                  placeholder="e.g. MIDC Bhosari, Pune or Surat GIDC"
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Number of Employees"
-                  type="number"
-                  fullWidth
-                  value={facilityData.employee_count}
-                  onChange={handleFacilityChange('employee_count')}
-                  placeholder="e.g. 20"
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  select
-                  label="Shift Pattern"
-                  fullWidth
-                  value={facilityData.shift_pattern}
-                  onChange={handleFacilityChange('shift_pattern')}
-                >
-                  {SHIFT_PATTERNS.map((p) => (
-                    <MenuItem key={p.value} value={p.value}>
-                      {p.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Box
+          <Box sx={{ mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={form.has_generator}
+                  onChange={(e) => setForm((prev) => ({ ...prev, has_generator: e.target.checked }))}
                   sx={{
-                    height: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    p: 1.5,
-                    borderRadius: 1.5,
-                    border: '1px solid',
-                    borderColor: 'divider',
+                    '& .MuiSwitch-switchBase.Mui-checked': { color: 'var(--color-amber)' },
+                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: 'var(--color-amber)' },
                   }}
+                />
+              }
+              label={
+                <Typography variant="body2" sx={{ color: 'var(--color-ink)', fontSize: '0.85rem' }}>
+                  Facility operates an on-site backup generator (genset)
+                </Typography>
+              }
+            />
+          </Box>
+
+          {form.has_generator && (
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: '4px',
+                bgcolor: 'rgba(20, 24, 29, 0.6)',
+                border: '1px solid var(--color-line)',
+                mb: 3,
+              }}
+            >
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <TextField
+                  fullWidth
+                  select
+                  size="small"
+                  label="Generator fuel type"
+                  value={form.fuel}
+                  onChange={handleField('fuel')}
                 >
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={facilityData.has_solar}
-                        onChange={handleFacilityChange('has_solar')}
-                        color="primary"
-                      />
-                    }
-                    label={
-                      <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          Rooftop Solar Installed?
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Tracks solar generation offsets
-                        </Typography>
-                      </Box>
-                    }
-                  />
-                </Box>
-              </Grid>
-            </Grid>
+                  <MenuItem value="diesel">Diesel (Standard MSME genset)</MenuItem>
+                  <MenuItem value="petrol">Petrol (Portable backup unit)</MenuItem>
+                </TextField>
 
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3.5 }}>
-              <Button
-                variant="contained"
-                color="primary"
-                size="large"
-                onClick={handleNext}
-                endIcon={<ArrowIcon />}
-                sx={{ px: 3, fontWeight: 700 }}
-              >
-                Next: Machinery Inventory
-              </Button>
+                <TextField
+                  fullWidth
+                  required
+                  select
+                  size="small"
+                  label="Genset rating (kVA)"
+                  value={form.kva}
+                  onChange={handleField('kva')}
+                >
+                  {COMMON_GENSET_RATINGS.map((rating) => (
+                    <MenuItem key={rating} value={rating}>
+                      {rating} kVA
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Stack>
             </Box>
-          </Card>
-        )}
+          )}
 
-        {/* ================= STEP 2: MACHINERY INVENTORY ================= */}
-        {activeStep === 1 && (
-          <Card variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2.5, borderColor: 'divider' }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-              Machinery & Equipment Inventory
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
-              Dump all machines, production lines, and diesel generators operating at your facility.
-            </Typography>
-
-            {/* Sector Preset Chips */}
-            <Box sx={{ mb: 3, p: 2, borderRadius: 2, bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider' }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                Quick-add Common Equipment for {facilityData.sector.toUpperCase()}:
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                Click any equipment below to add it directly to your inventory:
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {sectorPresets.map((preset) => (
-                  <Chip
-                    key={preset.name}
-                    label={`+ ${preset.name} (${preset.power_rating_kw} kW • ${preset.primary_fuel})`}
-                    variant="outlined"
-                    onClick={() => handleAddPresetMachine(preset)}
-                    sx={{
-                      cursor: 'pointer',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      borderColor: 'primary.main',
-                      bgcolor: 'background.paper',
-                      '&:hover': { bgcolor: 'primary.main', color: '#FFFFFF' },
-                    }}
-                  />
-                ))}
-              </Box>
-            </Box>
-
-            {/* Current Machine Inventory Table */}
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                Current Machinery List ({machinesList.length} items registered)
-              </Typography>
-              {machinesList.length === 0 ? (
-                <Alert severity="info" sx={{ fontSize: '0.825rem' }}>
-                  No machines added yet. Use the presets above or form below to add equipment.
-                </Alert>
-              ) : (
-                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow sx={{ bgcolor: 'action.hover' }}>
-                        <TableCell sx={{ fontWeight: 700 }}>Machine Name</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>Primary Fuel</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }} align="right">Power (kW)</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }} align="right">Age (Yrs)</TableCell>
-                        <TableCell align="center" sx={{ width: 60 }}></TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {machinesList.map((m) => (
-                        <TableRow key={m.id} hover>
-                          <TableCell sx={{ fontWeight: 600 }}>{m.name}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={SOURCE_TYPE_LABELS[m.primary_fuel] || m.primary_fuel}
-                              size="small"
-                              sx={{ fontSize: '0.7rem', height: 20 }}
-                            />
-                          </TableCell>
-                          <TableCell align="right">{m.power_rating_kw ? `${m.power_rating_kw} kW` : '—'}</TableCell>
-                          <TableCell align="right">{m.age_years ? `${m.age_years} yrs` : '—'}</TableCell>
-                          <TableCell align="center">
-                            <IconButton size="small" color="error" onClick={() => handleRemoveMachine(m.id)}>
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-            </Box>
-
-            {/* Custom Machine Add Form */}
-            <Box component="form" onSubmit={handleAddCustomMachine} sx={{ p: 2, borderRadius: 2, border: '1px dashed', borderColor: 'divider' }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
-                + Add Custom Machinery / Genset
-              </Typography>
-              <Grid container spacing={1.5} alignItems="center">
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    label="Machine Name"
-                    fullWidth
-                    size="small"
-                    value={customMachine.name}
-                    onChange={(e) => setCustomMachine((prev) => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g. 50 HP Air Blower"
-                  />
-                </Grid>
-                <Grid size={{ xs: 6, sm: 3 }}>
-                  <TextField
-                    select
-                    label="Fuel Source"
-                    fullWidth
-                    size="small"
-                    value={customMachine.primary_fuel}
-                    onChange={(e) => setCustomMachine((prev) => ({ ...prev, primary_fuel: e.target.value }))}
-                  >
-                    {Object.values(SOURCE_TYPES).map((st) => (
-                      <MenuItem key={st} value={st}>
-                        {SOURCE_TYPE_LABELS[st]}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                </Grid>
-                <Grid size={{ xs: 6, sm: 2 }}>
-                  <TextField
-                    label="Power (kW)"
-                    type="number"
-                    fullWidth
-                    size="small"
-                    value={customMachine.power_rating_kw}
-                    onChange={(e) => setCustomMachine((prev) => ({ ...prev, power_rating_kw: e.target.value }))}
-                    placeholder="30"
-                  />
-                </Grid>
-                <Grid size={{ xs: 6, sm: 2 }}>
-                  <TextField
-                    label="Age (Years)"
-                    type="number"
-                    fullWidth
-                    size="small"
-                    value={customMachine.age_years}
-                    onChange={(e) => setCustomMachine((prev) => ({ ...prev, age_years: e.target.value }))}
-                    placeholder="4"
-                  />
-                </Grid>
-                <Grid size={{ xs: 6, sm: 1 }}>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    fullWidth
-                    disabled={!customMachine.name.trim()}
-                    sx={{ height: 40 }}
-                  >
-                    Add
-                  </Button>
-                </Grid>
-              </Grid>
-            </Box>
-
-            {/* Navigation Actions */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3.5 }}>
-              <Button variant="outlined" onClick={handleBack} startIcon={<BackIcon />}>
-                Back
-              </Button>
-              <Button
-                variant="contained"
-                color="primary"
-                size="large"
-                onClick={handleNext}
-                endIcon={<ArrowIcon />}
-                sx={{ px: 3, fontWeight: 700 }}
-              >
-                Next: Energy & Baseline Output
-              </Button>
-            </Box>
-          </Card>
-        )}
-
-        {/* ================= STEP 3: BASELINE ENERGY & OUTPUT ================= */}
-        {activeStep === 2 && (
-          <Card variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2.5, borderColor: 'divider' }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-              Baseline Resource Consumption & Production Output
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Provide average monthly energy consumption and output so Energize U can immediately compute your ₹/unit specific cost.
-            </Typography>
-
-            <Grid container spacing={2.5}>
-              {/* Electricity Grid Baseline */}
-              <Grid size={{ xs: 12 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <EnergyIcon fontSize="small" sx={{ color: 'primary.main' }} />
-                  1. Monthly Grid Electricity Consumption
+          <Box sx={{ mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={form.has_solar}
+                  onChange={(e) => setForm((prev) => ({ ...prev, has_solar: e.target.checked }))}
+                  sx={{
+                    '& .MuiSwitch-switchBase.Mui-checked': { color: 'var(--color-amber)' },
+                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: 'var(--color-amber)' },
+                  }}
+                />
+              }
+              label={
+                <Typography variant="body2" sx={{ color: 'var(--color-ink)', fontSize: '0.85rem' }}>
+                  Facility has rooftop solar installed
                 </Typography>
-              </Grid>
+              }
+            />
+          </Box>
 
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Average Monthly Consumption (kWh)"
-                  type="number"
-                  fullWidth
-                  required
-                  value={baselineData.monthly_kwh}
-                  onChange={handleBaselineChange('monthly_kwh')}
-                  placeholder="e.g. 4500"
-                  helperText="Units consumed as per monthly electricity bill"
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Average Monthly Bill Amount (₹)"
-                  type="number"
-                  fullWidth
-                  required
-                  value={baselineData.monthly_grid_spend}
-                  onChange={handleBaselineChange('monthly_grid_spend')}
-                  placeholder="e.g. 42000"
-                  helperText="Total electricity bill including fixed & energy charges"
-                />
-              </Grid>
-
-              {/* Generator Diesel Baseline */}
-              <Grid size={{ xs: 12 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <FactoryIcon fontSize="small" sx={{ color: '#F59E0B' }} />
-                    2. Diesel Generator Fuel Consumption
-                  </Typography>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={baselineData.has_diesel_backup}
-                        onChange={handleBaselineChange('has_diesel_backup')}
-                      />
-                    }
-                    label="Uses Diesel Generator"
-                  />
-                </Box>
-              </Grid>
-
-              {baselineData.has_diesel_backup && (
-                <>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      label="Monthly Diesel Purchased (Litres)"
-                      type="number"
-                      fullWidth
-                      value={baselineData.monthly_diesel_litres}
-                      onChange={handleBaselineChange('monthly_diesel_litres')}
-                      placeholder="e.g. 250"
-                    />
-                  </Grid>
-
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      label="Monthly Diesel Spend (₹)"
-                      type="number"
-                      fullWidth
-                      value={baselineData.monthly_diesel_spend}
-                      onChange={handleBaselineChange('monthly_diesel_spend')}
-                      placeholder="e.g. 23500"
-                    />
-                  </Grid>
-                </>
-              )}
-
-              {/* Production Output */}
-              <Grid size={{ xs: 12 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                  <OutputIcon fontSize="small" sx={{ color: '#3B82F6' }} />
-                  3. Monthly Production Output
-                </Typography>
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Monthly Production Output Quantity"
-                  type="number"
-                  fullWidth
-                  required
-                  value={baselineData.output_quantity}
-                  onChange={handleBaselineChange('output_quantity')}
-                  placeholder="e.g. 50000"
-                  helperText="e.g. 50,000 printed sheets, 8,000 meters cloth, or 2,500 kg metal"
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Output Unit"
-                  fullWidth
-                  required
-                  value={baselineData.output_unit}
-                  onChange={handleBaselineChange('output_unit')}
-                  placeholder="e.g. sheets, meters, kg, boxes, pieces"
-                  helperText="The measurement unit for specific energy calculations"
-                />
-              </Grid>
-            </Grid>
-
-            {/* Navigation & Submit Actions */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-              <Button variant="outlined" onClick={handleBack} startIcon={<BackIcon />} disabled={loading}>
-                Back
-              </Button>
-              <Button
-                variant="contained"
-                color="primary"
-                size="large"
-                disabled={loading}
-                onClick={handleFinishSetup}
-                startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <CheckIcon />}
-                sx={{ px: 3.5, fontWeight: 700 }}
-              >
-                {loading ? 'Configuring Facility Intelligence...' : 'Complete & Launch Intelligence'}
-              </Button>
+          {form.has_solar && (
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: '4px',
+                bgcolor: 'rgba(20, 24, 29, 0.6)',
+                border: '1px solid var(--color-line)',
+                mb: 3,
+              }}
+            >
+              <TextField
+                required
+                type="number"
+                size="small"
+                label="Installed solar capacity (kWp)"
+                inputProps={{ min: 0.1, step: 0.5 }}
+                value={form.solar_capacity_kw}
+                onChange={handleField('solar_capacity_kw')}
+                sx={{ maxWidth: 300 }}
+              />
             </Box>
-          </Card>
-        )}
-      </Box>
-    </Box>
+          )}
+
+          <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={busy}
+              sx={{
+                bgcolor: 'var(--color-amber)',
+                color: '#14181D',
+                fontWeight: 600,
+                textTransform: 'none',
+                borderRadius: '4px',
+                boxShadow: 'none',
+                px: 3,
+                py: 1,
+                '&:hover': { bgcolor: '#c47d25', boxShadow: 'none' },
+              }}
+            >
+              {busy ? 'Saving…' : 'Save & proceed to bill upload'}
+            </Button>
+          </Box>
+        </Box>
+      ) : (
+        <Box
+          sx={{
+            p: { xs: 2.5, sm: 3.5 },
+            bgcolor: 'var(--color-surface, #1C222A)',
+            border: '1px solid var(--color-line)',
+            borderRadius: '4px',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+            <BillIcon sx={{ color: 'var(--color-amber)', fontSize: 24 }} />
+            <Typography variant="h6" sx={{ fontWeight: 600, color: 'var(--color-ink)' }}>
+              Scan first electricity bill
+            </Typography>
+          </Box>
+          <Typography variant="body2" sx={{ color: 'var(--color-ink-muted)', mb: 3, fontSize: '0.85rem' }}>
+            Upload a recent electricity bill photo. The multimodal vision model will parse units consumed, sanctioned load, and tariff charges, allowing full review before saving.
+          </Typography>
+
+          {billSaved && (
+            <Alert
+              severity="success"
+              sx={{
+                mb: 3,
+                borderRadius: '4px',
+                bgcolor: 'rgba(110, 155, 123, 0.12)',
+                color: 'var(--color-ink)',
+                border: '1px solid rgba(110, 155, 123, 0.3)',
+              }}
+            >
+              Electricity bill scanned and recorded in ledger. You can now access your facility overview.
+            </Alert>
+          )}
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <Button
+              variant="outlined"
+              startIcon={<EnergyIcon />}
+              onClick={() => setBillOpen(true)}
+              sx={{
+                borderColor: 'var(--color-line)',
+                color: 'var(--color-ink)',
+                textTransform: 'none',
+                borderRadius: '4px',
+                '&:hover': { borderColor: 'var(--color-amber)', color: 'var(--color-amber)' },
+              }}
+            >
+              Upload electricity bill (AI OCR)
+            </Button>
+            <Button
+              variant="contained"
+              disabled={busy}
+              onClick={handleFinish}
+              sx={{
+                bgcolor: 'var(--color-amber)',
+                color: '#14181D',
+                fontWeight: 600,
+                textTransform: 'none',
+                borderRadius: '4px',
+                boxShadow: 'none',
+                '&:hover': { bgcolor: '#c47d25', boxShadow: 'none' },
+              }}
+            >
+              {busy ? 'Finishing…' : 'Enter facility dashboard'}
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() => setStep(0)}
+              sx={{ color: 'var(--color-ink-muted)', textTransform: 'none' }}
+            >
+              Back to facility setup
+            </Button>
+          </Stack>
+        </Box>
+      )}
+
+      <BillUploadDialog
+        open={billOpen}
+        onClose={() => setBillOpen(false)}
+        businessId={businessId}
+        onSuccess={() => setBillSaved(true)}
+      />
+    </Container>
   )
 }
+

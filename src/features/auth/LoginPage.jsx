@@ -90,40 +90,39 @@ export default function LoginPage() {
         p: 2,
       }}
     >
-      <Card
-        variant="outlined"
+      <Box
         sx={{
           maxWidth: 440,
           width: '100%',
-          p: { xs: 2.5, sm: 3.5 },
-          borderRadius: 2.5,
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
+          p: { xs: 3, sm: 4 },
+          borderRadius: '4px',
+          border: '1px solid var(--color-line)',
+          bgcolor: 'var(--color-surface, #1C222A)',
         }}
       >
-        <CardContent sx={{ p: 0 }}>
+        <Box sx={{ p: 0 }}>
           {/* Logo & Headline */}
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
             <Box
               sx={{
-                width: 48,
-                height: 48,
-                borderRadius: 2,
-                bgcolor: 'primary.main',
+                width: 44,
+                height: 44,
+                borderRadius: '4px',
+                bgcolor: 'var(--color-amber)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#FFFFFF',
+                color: '#14181D',
                 mb: 1.5,
               }}
             >
-              <EnergyIcon sx={{ fontSize: 30 }} />
+              <EnergyIcon sx={{ fontSize: 26 }} />
             </Box>
             <Typography variant="h5" align="center" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
-              Energize <Box component="span" sx={{ color: 'primary.main' }}>U</Box>
+              Energize <Box component="span" sx={{ color: 'var(--color-amber)' }}>U</Box>
             </Typography>
-            <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 0.5 }}>
-              MSME Multi-Fuel Energy Intelligence
+            <Typography variant="body2" sx={{ color: 'var(--color-ink-muted)', mt: 0.5 }} align="center">
+              MSME multi-fuel energy intelligence
             </Typography>
           </Box>
 
@@ -131,7 +130,7 @@ export default function LoginPage() {
           {rawActiveError && (
             <Alert
               severity="warning"
-              sx={{ mb: 2.5, fontSize: '0.825rem', '& .MuiAlert-message': { width: '100%' } }}
+              sx={{ mb: 2.5, borderRadius: '4px', fontSize: '0.825rem', '& .MuiAlert-message': { width: '100%' } }}
               action={
                 <IconButton
                   size="small"
@@ -144,7 +143,7 @@ export default function LoginPage() {
               }
             >
               <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.825rem' }}>
-                {isExchangeErrorCode ? 'Google Client Secret Mismatch' : 'Sign-In Notice'}
+                {isExchangeErrorCode ? 'Google Client Secret Mismatch' : 'Sign-in notice'}
               </Typography>
               <Typography variant="caption" sx={{ display: 'block', mt: 0.25, color: 'text.secondary' }}>
                 {isExchangeErrorCode
@@ -160,39 +159,37 @@ export default function LoginPage() {
               sx={{
                 mb: 2.5,
                 p: 2,
-                borderRadius: 2,
-                bgcolor: 'action.hover',
-                border: '1px solid',
-                borderColor: 'divider',
+                borderRadius: '4px',
+                bgcolor: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid var(--color-line)',
                 fontSize: '0.8rem',
               }}
             >
               <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                How to Fix Google Login in 2 Minutes:
+                How to fix Google login:
               </Typography>
-              <Typography variant="caption" component="div" color="text.secondary" sx={{ mb: 1.5, lineHeight: 1.5 }}>
-                1. Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" style={{ color: '#10B981' }}>Google Cloud Console</a>.<br />
+              <Typography variant="caption" component="div" sx={{ mb: 1.5, lineHeight: 1.5, color: 'var(--color-ink-muted)' }}>
+                1. Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" style={{ color: 'var(--color-amber)' }}>Google Cloud Console</a>.<br />
                 2. Click your OAuth 2.0 Web Client.<br />
                 3. Copy the <strong>Client Secret</strong> (starts with <code>GOCSPX-</code>).<br />
-                4. Paste it into <a href="https://supabase.com/dashboard/project/prxuoaquvbbgqjxbvabl/auth/providers" target="_blank" rel="noreferrer" style={{ color: '#10B981' }}>Supabase Google Provider</a> as Client Secret and Save.<br />
+                4. Paste it into <a href="https://supabase.com/dashboard/project/prxuoaquvbbgqjxbvabl/auth/providers" target="_blank" rel="noreferrer" style={{ color: 'var(--color-amber)' }}>Supabase Google Provider</a> as Client Secret and Save.<br />
                 5. Ensure this exact <strong>Authorized redirect URI</strong> is added in Google Cloud Console:
               </Typography>
               <Box
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
-                  bgcolor: 'background.paper',
+                  bgcolor: '#14181D',
                   p: 1,
-                  borderRadius: 1.5,
-                  border: '1px solid',
-                  borderColor: 'divider',
+                  borderRadius: '4px',
+                  border: '1px solid var(--color-line)',
                   gap: 1,
                 }}
               >
                 <Typography
                   variant="caption"
                   sx={{
-                    fontFamily: 'monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '0.72rem',
                     flex: 1,
                     overflow: 'hidden',
@@ -242,27 +239,28 @@ export default function LoginPage() {
               py: 1.3,
               fontWeight: 600,
               fontSize: '0.925rem',
-              borderColor: 'divider',
-              color: 'text.primary',
+              borderColor: 'var(--color-line)',
+              color: 'var(--color-ink)',
+              borderRadius: '4px',
+              textTransform: 'none',
               '&:hover': {
-                borderColor: 'text.secondary',
-                bgcolor: 'action.hover',
+                borderColor: 'var(--color-ink-muted)',
+                bgcolor: 'rgba(255, 255, 255, 0.03)',
               },
             }}
           >
             {loading ? <CircularProgress size={20} color="inherit" /> : 'Sign in with Google'}
           </Button>
 
-          <Divider sx={{ my: 2.5 }}>
-            <Typography variant="caption" color="text.secondary">
-              OR
+          <Divider sx={{ my: 2.5, borderColor: 'var(--color-line)' }}>
+            <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>
+              or
             </Typography>
           </Divider>
 
           {/* 1-Click Instant Demo Access (Works instantly with zero setup) */}
           <Button
             variant="contained"
-            color="primary"
             fullWidth
             size="large"
             disabled={loading}
@@ -272,21 +270,25 @@ export default function LoginPage() {
               py: 1.3,
               fontWeight: 700,
               fontSize: '0.925rem',
+              bgcolor: 'var(--color-amber)',
+              color: '#14181D',
+              borderRadius: '4px',
+              textTransform: 'none',
+              '&:hover': { bgcolor: '#c47d25' },
             }}
           >
-            1-Click Instant Demo (Owner Access)
+            1-click instant demo (owner access)
           </Button>
 
           <Typography
             variant="caption"
-            color="text.secondary"
+            sx={{ display: 'block', mt: 2, fontSize: '0.75rem', lineHeight: 1.5, color: 'var(--color-ink-muted)' }}
             align="center"
-            sx={{ display: 'block', mt: 2, fontSize: '0.75rem', lineHeight: 1.5 }}
           >
             Instant access with zero passwords and zero setup required.
           </Typography>
-        </CardContent>
-      </Card>
+        </Box>
+      </Box>
     </Box>
   )
 }

@@ -75,42 +75,63 @@ export default function OutputRecordDialog({
       onClose={onClose}
       maxWidth="xs"
       fullWidth
-      slotProps={{ paper: { sx: { bgcolor: 'background.paper', borderRadius: 3 } } }}
+      slotProps={{
+        paper: {
+          sx: {
+            bgcolor: 'var(--color-surface, #1C222A)',
+            border: '1px solid var(--color-line)',
+            borderRadius: '4px',
+            backgroundImage: 'none',
+            boxShadow: 'none',
+          },
+        },
+      }}
     >
-      <DialogTitle sx={{ fontWeight: 700 }}>Log Production Output</DialogTitle>
+      <DialogTitle sx={{ fontWeight: 700, borderBottom: '1px solid var(--color-line)', pb: 2 }}>
+        Log production output
+      </DialogTitle>
       <Box component="form" onSubmit={handleSubmit}>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-          {errorMsg && <Alert severity="error">{errorMsg}</Alert>}
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2.5 }}>
+          {errorMsg && <Alert severity="error" sx={{ borderRadius: '4px' }}>{errorMsg}</Alert>}
 
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
-                label="Period Start"
+                label="Period start"
                 type="date"
                 required
                 fullWidth
-                slotProps={{ inputLabel: { shrink: true } }}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  input: { sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' } },
+                }}
                 value={periodStart}
                 onChange={(e) => setPeriodStart(e.target.value)}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
-                label="Period End"
+                label="Period end"
                 type="date"
                 required
                 fullWidth
-                slotProps={{ inputLabel: { shrink: true } }}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  input: { sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' } },
+                }}
                 value={periodEnd}
                 onChange={(e) => setPeriodEnd(e.target.value)}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 7 }}>
               <TextField
-                label="Output Quantity"
+                label="Output quantity"
                 type="number"
                 required
                 fullWidth
+                slotProps={{
+                  input: { sx: { borderRadius: '4px', fontFamily: 'var(--font-mono)' } },
+                }}
                 value={outputQuantity}
                 onChange={(e) => setOutputQuantity(e.target.value)}
                 placeholder="e.g. 50000"
@@ -121,6 +142,9 @@ export default function OutputRecordDialog({
                 label="Unit"
                 required
                 fullWidth
+                slotProps={{
+                  input: { sx: { borderRadius: '4px' } },
+                }}
                 value={outputUnit}
                 onChange={(e) => setOutputUnit(e.target.value)}
                 placeholder="e.g. sheets, kg, meters"
@@ -128,12 +152,24 @@ export default function OutputRecordDialog({
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={onClose} color="inherit">
+        <DialogActions sx={{ px: 3, pb: 2.5, borderTop: '1px solid var(--color-line)', pt: 2 }}>
+          <Button onClick={onClose} sx={{ color: 'var(--color-ink-muted)', textTransform: 'none', borderRadius: '4px' }}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" color="primary" disabled={loading}>
-            {loading ? <CircularProgress size={20} color="inherit" /> : 'Save Output'}
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={loading}
+            sx={{
+              bgcolor: 'var(--color-amber)',
+              color: '#14181D',
+              fontWeight: 700,
+              borderRadius: '4px',
+              textTransform: 'none',
+              '&:hover': { bgcolor: '#c47d25' },
+            }}
+          >
+            {loading ? <CircularProgress size={20} color="inherit" /> : 'Save output'}
           </Button>
         </DialogActions>
       </Box>

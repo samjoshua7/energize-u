@@ -58,40 +58,92 @@ export default function EnergyAssistant() {
         <IconButton
           aria-label="Open energy assistant"
           onClick={() => setOpen(true)}
-          sx={{ position: 'fixed', right: { xs: 16, sm: 28 }, bottom: { xs: 72, sm: 28 }, zIndex: 1200, bgcolor: 'primary.main', color: 'primary.contrastText', boxShadow: '0 8px 24px rgba(15, 118, 110, 0.25)', '&:hover': { bgcolor: 'primary.dark' } }}
+          sx={{
+            position: 'fixed',
+            right: { xs: 16, sm: 28 },
+            bottom: { xs: 72, sm: 28 },
+            zIndex: 1200,
+            bgcolor: 'var(--color-amber)',
+            color: '#14181D',
+            borderRadius: '4px',
+            boxShadow: 'none',
+            '&:hover': { bgcolor: '#c47d25' },
+          }}
         >
           <AssistantIcon />
         </IconButton>
       </Tooltip>
 
-      <Drawer anchor="right" open={open} onClose={() => setOpen(false)} PaperProps={{ sx: { width: { xs: '100%', sm: 390 }, display: 'flex' } }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.5 }}>
+      <Drawer
+        anchor="right"
+        open={open}
+        onClose={() => setOpen(false)}
+        PaperProps={{
+          sx: {
+            width: { xs: '100%', sm: 390 },
+            display: 'flex',
+            bgcolor: 'var(--color-surface, #1C222A)',
+            borderLeft: '1px solid var(--color-line)',
+          },
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.5, borderBottom: '1px solid var(--color-line)' }}>
           <Box>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Energy assistant</Typography>
-            <Typography variant="caption" color="text.secondary">Answers from your live ledger</Typography>
+            <Typography variant="caption" sx={{ color: 'var(--color-ink-muted)' }}>Answers from your live ledger</Typography>
           </Box>
-          <IconButton aria-label="Close energy assistant" onClick={() => setOpen(false)}><CloseIcon /></IconButton>
+          <IconButton aria-label="Close energy assistant" onClick={() => setOpen(false)} sx={{ color: 'var(--color-ink-muted)' }}>
+            <CloseIcon />
+          </IconButton>
         </Box>
-        <Divider />
 
         <Box sx={{ flex: 1, overflowY: 'auto', p: 2, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
           {messages.length === 0 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>Ask about your energy data.</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Try a question about spend, fuel mix, trends, or your open recommendations.</Typography>
+              <Typography variant="body2" sx={{ color: 'var(--color-ink-muted)', mt: 0.5 }}>Try a question about spend, fuel mix, trends, or your open recommendations.</Typography>
             </Box>
           )}
           {messages.map((item, index) => (
-            <Box key={`${item.role}-${index}`} sx={{ alignSelf: item.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '88%', px: 1.5, py: 1.1, borderRadius: 2, bgcolor: item.role === 'user' ? 'primary.main' : 'action.hover', color: item.role === 'user' ? 'primary.contrastText' : 'text.primary' }}>
+            <Box
+              key={`${item.role}-${index}`}
+              sx={{
+                alignSelf: item.role === 'user' ? 'flex-end' : 'flex-start',
+                maxWidth: '88%',
+                px: 1.5,
+                py: 1.1,
+                borderRadius: '4px',
+                bgcolor: item.role === 'user' ? 'var(--color-amber)' : 'rgba(255, 255, 255, 0.04)',
+                color: item.role === 'user' ? '#14181D' : 'var(--color-ink)',
+                border: item.role === 'user' ? 'none' : '1px solid var(--color-line)',
+              }}
+            >
               <Typography variant="body2">{item.content}</Typography>
             </Box>
           ))}
-          {sending && <CircularProgress size={18} sx={{ alignSelf: 'flex-start', mt: 1 }} />}
-          {error && <Typography variant="caption" color="error">{error}</Typography>}
+          {sending && <CircularProgress size={18} sx={{ alignSelf: 'flex-start', mt: 1, color: 'var(--color-amber)' }} />}
+          {error && <Typography variant="caption" sx={{ color: 'var(--color-rust)' }}>{error}</Typography>}
         </Box>
 
-        <Box component="form" onSubmit={handleSend} sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
-          <TextField fullWidth multiline maxRows={4} placeholder="Ask about your energy data" value={message} onChange={(event) => setMessage(event.target.value)} InputProps={{ endAdornment: <Button type="submit" aria-label="Send message" disabled={!message.trim() || sending}><SendIcon /></Button> }} />
+        <Box component="form" onSubmit={handleSend} sx={{ p: 1.5, borderTop: '1px solid var(--color-line)' }}>
+          <TextField
+            fullWidth
+            multiline
+            maxRows={4}
+            placeholder="Ask about your energy data"
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            slotProps={{
+              input: {
+                sx: { borderRadius: '4px' },
+                endAdornment: (
+                  <Button type="submit" aria-label="Send message" disabled={!message.trim() || sending} sx={{ color: 'var(--color-amber)', minWidth: 'auto', p: 0.75 }}>
+                    <SendIcon />
+                  </Button>
+                ),
+              },
+            }}
+          />
         </Box>
       </Drawer>
     </>
